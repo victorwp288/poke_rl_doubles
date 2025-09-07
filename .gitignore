@@ -243,3 +243,4 @@ ruff.toml
 mypy.ini
 
 __pycache__
+.serena
