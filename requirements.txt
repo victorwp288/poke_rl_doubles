@@ -1,0 +1,23 @@
+tensorflow==2.19.0 
+tensorflow-gpu==2.19.0
+poke_env==0.10.0
+asyncio>=4.0.0
+gymnasium>=0.29
+numpy>=2.3
+pandas==2.3.2
+matplotlib==3.10.5
+seaborn>=0.13
+tensorboard==2.19.0
+typer>=0.12
+pydantic-settings>=2.5
+orjson>=3.10
+rich>=13.8
+tqdm>=4.66
+ruff>=0.12
+mypy>=1.16
+pre-commit>=4.3.0
+# Web viewer (no backend server)
+gradio>=4.44
+# Database extras
+sqlmodel>=0.0.22
+pydantic>=2.8
