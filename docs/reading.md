@@ -18,6 +18,18 @@ Competitive Pokémon specific
 * Pikalytics Gen 9 DOU usage: https://pikalytics.com/pokedex/gen9doublesou
 * Competitive deep reinforcement learning over a pokémon battling simulator: https://www.scopus.com/pages/publications/85085916831
 * Enhancing Pokémon VGC Player Performance: Intelligent Agents Through Deep Reinforcement Learning and Neuroevolution: https://www.scopus.com/pages/publications/85195826444
+* Winning at Pokémon Random Battles Using Reinforcement Learning: https://dspace.mit.edu/handle/1721.1/153888
+* Comparative performance analysis of AI algorithms in competitive Pokémon Showdown battles: https://www.um.edu.mt/library/oar/handle/123456789/115294
+* Applying Competitive Policy Optimization to Pokémon Battling: https://shatayu.co/Honors_Project.pdf
+* A Self-Play Policy Optimization Approach to Battling Pokémon: https://ieeexplore.ieee.org/abstract/document/8848014
+* Teamwork under extreme uncertainty: AI for Pokemon ranks 33rd in the world: https://arxiv.org/abs/2212.13338
+* Showdown AI competition: https://ieeexplore.ieee.org/abstract/document/8080435
+* I Choose You, Reinforcement Learning! Trained RL Agents For Pokémon Battles: https://sol.sbc.org.br/index.php/sbgames_estendido/article/view/31997
+
+
+
+
+
 
 Broader precedents
 * AlphaStar: https://www.nature.com/articles/s41586-019-1724-z
