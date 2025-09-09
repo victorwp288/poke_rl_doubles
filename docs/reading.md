@@ -16,6 +16,8 @@ Competitive Pokémon specific
 * MIT thesis on Random Battles: https://dspace.mit.edu/handle/1721.1/155049
 * Smogon OU hub: https://www.smogon.com/forums/forums/doubles-ou.729/
 * Pikalytics Gen 9 DOU usage: https://pikalytics.com/pokedex/gen9doublesou
+* Competitive deep reinforcement learning over a pokémon battling simulator: https://www.scopus.com/pages/publications/85085916831
+* Enhancing Pokémon VGC Player Performance: Intelligent Agents Through Deep Reinforcement Learning and Neuroevolution: https://www.scopus.com/pages/publications/85195826444
 
 Broader precedents
 * AlphaStar: https://www.nature.com/articles/s41586-019-1724-z
