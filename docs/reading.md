@@ -25,7 +25,8 @@ Competitive Pokémon specific
 * Teamwork under extreme uncertainty: AI for Pokemon ranks 33rd in the world: https://arxiv.org/abs/2212.13338
 * Showdown AI competition: https://ieeexplore.ieee.org/abstract/document/8080435
 * I Choose You, Reinforcement Learning! Trained RL Agents For Pokémon Battles: https://sol.sbc.org.br/index.php/sbgames_estendido/article/view/31997
-
+* Human-Level Competitive Pokémon via Scalable Offline Reinforcement Learning with Transformers: https://arxiv.org/abs/2504.04395
+* A Benchmark for Generalizing Across Diverse Team Strategies in Competitive Pokémon: https://arxiv.org/abs/2506.10326
 
 
 
