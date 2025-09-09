@@ -7,9 +7,11 @@ Core tooling and protocol
 Algorithms
 * PPO paper: https://arxiv.org/abs/1707.06347
 * GAE paper: https://arxiv.org/abs/1506.02438
-* Invalid action masking: https://sb3-contrib.readthedocs.io/en/master/modules/ppo_mask.html
+* Stable-Baselines3 docs: https://stable-baselines3.readthedocs.io/
+* Invalid action masking (sb3-contrib): https://sb3-contrib.readthedocs.io/en/master/modules/ppo_mask.html
+* Recurrent PPO (sb3-contrib): https://sb3-contrib.readthedocs.io/en/master/modules/recurrent_ppo.html
+* PyTorch MPS (Apple Metal): https://pytorch.org/docs/stable/notes/mps.html
 * DRQN: https://arxiv.org/abs/1507.06527
-* Keras mixed precision: https://keras.io/api/mixed_precision/
 
 Competitive Pokémon specific
 * PokeLLMon: https://arxiv.org/abs/2407.13730
