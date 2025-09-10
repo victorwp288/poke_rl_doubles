@@ -4,7 +4,7 @@ Start: Thu, 11 September 2025
 Hand‑in: Thu, 18 December 2025 at 10:00 CET
 
 ## Overview
-PPO‑based recurrent agent built on Stable‑Baselines3 (PyTorch) that plays
+PPO‑based agent built on Stable‑Baselines3 (PyTorch) that plays
 **Generation 9 Doubles (OU)** via **poke‑env**. Training focuses on a local
 Showdown simulator first; light online evaluation happens on a labeled bot
 account with polite rate limits. We evaluate offline vs heuristics and via
