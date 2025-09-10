@@ -34,7 +34,7 @@ python tests/smoke_test_env.py
 - `scripts/` — CLI entry points (training/eval)
 - `configs/` — YAML configs (see `configs/default.yml`)
 - `tests/` — smoke tests and simple unit tests
-- `web/` — lightweight Gradio viewer(not required)
+- `web/` — lightweight Gradio viewer (not required)
 - `docs/` — notes and design docs
 - `teams/` — example Pokémon team exports for experiments
 

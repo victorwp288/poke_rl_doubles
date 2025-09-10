@@ -7,7 +7,7 @@ Usage:
 
 What it does:
 - Prints Python version, platform, and pip-installed lib versions (where available)
-- Verifies PyTorch imports, checks MPS (Apple Metal) and runs a tiny matmul
+- Verifies PyTorch imports and runs a tiny matmul
 - Imports (and lightly exercises) core libs: numpy, gymnasium, poke_env
 - Writes two small plots to ./artifacts: matplotlib_smoke.png and seaborn_smoke.png
 - Tries optional extras if installed: gradio, sqlmodel
