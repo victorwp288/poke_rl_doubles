@@ -1,78 +1,60 @@
-# RL agent for Pokémon Showdown Gen 9 Doubles
+# RL Agent for Pokémon Showdown — Gen 9 Doubles (OU)
 
-Start: Thu 11 September 2025  
-Hand in: Thu 18 December 2025 at 10:00 CET
+Start: Thu, 11 September 2025  
+Hand‑in: Thu, 18 December 2025 at 10:00 CET
 
-## What we are building
-PPO-based recurrent agent in TensorFlow/Keras playing **Gen 9 Doubles (OU)** via **poke-env**. Train mostly on a local Showdown simulator. Fine-tune on a labeled bot account with polite rate limits. Evaluate offline vs heuristics and on ladder rating.
+## Overview
+PPO‑based recurrent agent built on Stable‑Baselines3 (PyTorch) that plays
+**Generation 9 Doubles (OU)** via **poke‑env**. Training focuses on a local
+Showdown simulator first; light online evaluation happens on a labeled bot
+account with polite rate limits. We evaluate offline vs heuristics and via
+ladder rating.
 
-PoC: https://github.com/victorwp288/poke-rl-demo
+Little related experiment: https://github.com/victorwp288/poke-rl-demo
 
-## Quick start
+## Quick Start
+Prereqs: Python 3.11. 
+
 ```bash
+
+# install deps
 pip install -r requirements.txt
 
-# test setup
+# smoke‑test the environment
 python tests/smoke_test_env.py
 ```
 
-## Web viewer
-This repo includes a very light Gradio UI that tails battle log files under `runs/latest/battles/`.
+## Development
+- Lint/format/type‑check: `ruff format . && ruff check --fix . && mypy src`
+- Web viewer: `python web/viewer_gradio.py`
+- Optional: set up pre‑commit hooks: `pre-commit install`
+
+## Project Structure
+- `src/` — reusable library code (Python 3.11)
+- `scripts/` — CLI entry points (training/eval)
+- `configs/` — YAML configs (see `configs/default.yml`)
+- `tests/` — smoke tests and simple unit tests
+- `web/` — lightweight Gradio viewer(not required)
+- `docs/` — notes and design docs
+- `teams/` — example Pokémon team exports for experiments
 
 
-Tip: if you don't have logs yet, generate a couple of dummy ones to test the UI:
-```bash
-python scripts/make_dummy_battles.py
-```
 
-## Optional SQLite database
-If you decide to store run metadata, and create a local DB:
-```bash
-python -c "from db.schema import create_db; create_db('runs.sqlite')"
-```
+## Configuration
+Default PPO and environment settings live in `configs/default.yml` (seed,
+format, PPO hyper‑parameters, and model sizes). You can duplicate this file and
+override values per experiment.
 
-## Repo layout
-```
-poke_rl_doubles/
-  src/
-    envs/
-      __init__.py
-      wrappers.py
-    models/
-      __init__.py
-      policy.py
-    algo/
-      __init__.py
-      ppo_tf.py
-    agents/
-      __init__.py
-      rl_player.py
-      heuristic_players.py
-    io/
-      __init__.py
-      replay_parser.py
-      logging_utils.py
-  scripts/
-    train_selfplay.py
-    train_imitation.py
-    eval_offline.py
-    eval_ladder.py
-    make_dummy_battles.py
-  web/
-    viewer_gradio.py
-  db/
-    schema.py
-  teams/
-    gen9dou_fixed.txt
-  configs/
-    default.yml
-  tests/
-    test_masks.py
-    smoke_test_env.py
-  docs/
-    reading.md
-  requirements.txt
-  requirements_web.txt
-  requirements_db.txt
-  README.md
-```
+## Style & Conventions
+- Formatting via Ruff: line length 100, double quotes, LF, 4‑space indent.
+- Imports auto‑sorted (Ruff/isort). Library code in `src/`.
+- Names: modules/files `snake_case.py`; functions/vars `snake_case`; classes
+  `CamelCase`; constants `UPPER_SNAKE`.
+- Add type hints for new public functions; run `mypy src` locally before PRs.
+
+## Security & Server Etiquette
+- Never commit secrets or account tokens. Prefer environment variables and
+  `configs/*.yml`.
+- Be polite with Showdown servers: rate‑limit requests and prefer a local
+  server for heavy training.
+

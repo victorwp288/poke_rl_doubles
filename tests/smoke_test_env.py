@@ -7,8 +7,8 @@ Usage:
 
 What it does:
 - Prints Python version, platform, and pip-installed lib versions (where available)
-- Verifies TensorFlow imports, lists devices, and runs a tiny matmul on GPU if present
-- Imports (and lightly exercises) core libs: numpy, pandas, gymnasium, poke_env
+- Verifies PyTorch imports, checks MPS (Apple Metal) and runs a tiny matmul
+- Imports (and lightly exercises) core libs: numpy, gymnasium, poke_env
 - Writes two small plots to ./artifacts: matplotlib_smoke.png and seaborn_smoke.png
 - Tries optional extras if installed: gradio, sqlmodel
 """
@@ -38,36 +38,25 @@ def main():
     artifacts = Path("artifacts")
     artifacts.mkdir(parents=True, exist_ok=True)
 
-    print("\n=== TensorFlow / Keras ===")
-    tf = imp("tensorflow")
-    if tf:
+    print("\n=== PyTorch ===")
+    torch = imp("torch")
+    if torch:
         try:
-            devices = tf.config.list_physical_devices()
-            print("Devices:", devices)
-            gpus = tf.config.list_physical_devices("GPU")
-            # try to enable memory growth on all GPUs
-            for gpu in gpus:
-                try:
-                    tf.config.experimental.set_memory_growth(gpu, True)
-                except Exception as e:
-                    print("  memory_growth failed:", e)
-            device = "/GPU:0" if gpus else "/CPU:0"
-            try:
-                with tf.device(device):
-                    a = tf.random.uniform((1024, 1024))
-                    b = tf.random.uniform((1024, 1024))
-                    t0 = time.time()
-                    c = tf.matmul(a, b)
-                    _ = c.numpy()
-                    dt = time.time() - t0
-                print(f"Matmul on {device} OK in {dt:.3f}s")
-                print(f"GPU available: {'YES' if gpus else 'NO'}")
-            except Exception as e:
-                print("  TensorFlow compute failed:", e)
+            mps = getattr(torch.backends, "mps", None)
+            mps_ok = bool(mps and mps.is_available())
+            device = torch.device("mps" if mps_ok else "cpu")
+            print(f"Device: {device}")
+            a = torch.randn(1024, 1024, device=device)
+            b = torch.randn(1024, 1024, device=device)
+            t0 = time.time()
+            c = a @ b
+            _ = c.cpu().numpy()
+            dt = time.time() - t0
+            print(f"Matmul on {device} OK in {dt:.3f}s (MPS={mps_ok})")
         except Exception as e:
-            print("  TensorFlow device check failed:", e)
+            print("  PyTorch compute failed:", e)
 
-    print("\n=== Core Numerics & Data ===")
+    print("\n=== Core Numerics ===")
     np = imp("numpy")
 
     print("\n=== Gymnasium (smoke) ===")

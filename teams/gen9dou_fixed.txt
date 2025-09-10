@@ -1,1 +1,60 @@
-EXAMPLE TEAM PLACEHOLDER
+Tornadus @ Covert Cloak
+Ability: Prankster
+Tera Type: Ghost
+EVs: 252 HP / 4 SpA / 252 Spe
+Timid Nature
+- Tailwind
+- Bleakwind Storm
+- Taunt
+- Protect
+
+Rillaboom @ Assault Vest
+Ability: Grassy Surge
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Grassy Glide
+- Wood Hammer
+- U-turn
+
+Gholdengo @ Leftovers
+Ability: Good as Gold
+Tera Type: Water
+EVs: 4 Def / 252 SpA / 252 Spe
+Modest Nature
+- Make It Rain
+- Shadow Ball
+- Nasty Plot
+- Protect
+
+Iron Hands @ Safety Goggles
+Ability: Quark Drive
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Drain Punch
+- Wild Charge
+- Volt Switch
+
+Heatran @ Shuca Berry
+Ability: Flash Fire
+Tera Type: Grass
+EVs: 252 HP / 252 SpA / 4 SpD
+Modest Nature
+- Heat Wave
+- Earth Power
+- Flash Cannon
+- Protect
+
+Amoonguss @ Rocky Helmet
+Ability: Regenerator
+Tera Type: Water
+EVs: 252 HP / 156 Def / 100 SpD
+Sassy Nature
+IVs: 0 Spe
+- Spore
+- Rage Powder
+- Pollen Puff
+- Protect

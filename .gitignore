@@ -233,6 +233,8 @@ $RECYCLE.BIN/
 *.lnk
 
 #
+plan/
+#
 AGENTS.md
 
 # ruff
