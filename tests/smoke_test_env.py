@@ -42,9 +42,10 @@ def main():
     torch = imp("torch")
     if torch:
         try:
+            cuda_ok = torch.cuda.is_available()
             mps = getattr(torch.backends, "mps", None)
             mps_ok = bool(mps and mps.is_available())
-            device = torch.device("mps" if mps_ok else "cpu")
+            device = torch.device("mps" if mps_ok else ("cuda" if cuda_ok else "cpu"))
             print(f"Device: {device}")
             a = torch.randn(1024, 1024, device=device)
             b = torch.randn(1024, 1024, device=device)
@@ -52,7 +53,7 @@ def main():
             c = a @ b
             _ = c.cpu().numpy()
             dt = time.time() - t0
-            print(f"Matmul on {device} OK in {dt:.3f}s (MPS={mps_ok})")
+            print(f"Matmul on {device} OK in {dt:.3f}s (MPS={mps_ok}, CUDA={cuda_ok})")
         except Exception as e:
             print("  PyTorch compute failed:", e)
 
