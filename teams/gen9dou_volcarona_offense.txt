@@ -1,0 +1,60 @@
+Tornadus @ Covert Cloak
+Ability: Prankster
+Tera Type: Ghost
+EVs: 252 HP / 4 SpA / 252 Spe
+Timid Nature
+- Tailwind
+- Bleakwind Storm
+- Taunt
+- Protect
+
+Volcarona @ Heavy-Duty Boots
+Ability: Flame Body
+Tera Type: Grass
+EVs: 160 HP / 252 SpA / 96 Spe
+Modest Nature
+- Fiery Dance
+- Giga Drain
+- Quiver Dance
+- Protect
+
+Garchomp @ Clear Amulet
+Ability: Rough Skin
+Tera Type: Ground
+EVs: 4 HP / 252 Atk / 252 Spe
+Jolly Nature
+- Earthquake
+- Rock Slide
+- Dragon Claw
+- Protect
+
+Gholdengo @ Leftovers
+Ability: Good as Gold
+Tera Type: Steel
+EVs: 4 Def / 252 SpA / 252 Spe
+Timid Nature
+- Make It Rain
+- Shadow Ball
+- Nasty Plot
+- Protect
+
+Rillaboom @ Assault Vest
+Ability: Grassy Surge
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Grassy Glide
+- Wood Hammer
+- U-turn
+
+Iron Hands @ Safety Goggles
+Ability: Quark Drive
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Drain Punch
+- Wild Charge
+- Protect
+

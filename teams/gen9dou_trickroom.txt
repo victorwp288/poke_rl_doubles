@@ -1,0 +1,65 @@
+Indeedee-F @ Psychic Seed
+Ability: Psychic Surge
+Tera Type: Fairy
+EVs: 252 HP / 100 Def / 156 SpD
+Calm Nature
+- Follow Me
+- Helping Hand
+- Psychic
+- Protect
+
+Hatterene @ Life Orb
+Ability: Magic Bounce
+Tera Type: Fairy
+EVs: 252 HP / 252 SpA / 4 SpD
+Quiet Nature
+IVs: 0 Spe
+- Trick Room
+- Expanding Force
+- Dazzling Gleam
+- Protect
+
+Torkoal @ Charcoal
+Ability: Drought
+Tera Type: Grass
+EVs: 252 HP / 252 SpA / 4 SpD
+Quiet Nature
+IVs: 0 Spe
+- Eruption
+- Heat Wave
+- Solar Beam
+- Protect
+
+Ursaluna @ Flame Orb
+Ability: Guts
+Tera Type: Normal
+EVs: 252 HP / 252 Atk / 4 SpD
+Brave Nature
+IVs: 0 Spe
+- Facade
+- Headlong Rush
+- Ice Punch
+- Protect
+
+Amoonguss @ Rocky Helmet
+Ability: Regenerator
+Tera Type: Water
+EVs: 252 HP / 156 Def / 100 SpD
+Sassy Nature
+IVs: 0 Spe
+- Spore
+- Rage Powder
+- Pollen Puff
+- Protect
+
+Iron Hands @ Safety Goggles
+Ability: Quark Drive
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Brave Nature
+IVs: 0 Spe
+- Fake Out
+- Drain Punch
+- Wild Charge
+- Protect
+

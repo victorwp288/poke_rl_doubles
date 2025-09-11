@@ -1,0 +1,60 @@
+Pelipper @ Damp Rock
+Ability: Drizzle
+Tera Type: Water
+EVs: 252 HP / 4 Def / 252 SpD
+Calm Nature
+- Hurricane
+- Tailwind
+- Wide Guard
+- Roost
+
+Volcanion @ Assault Vest
+Ability: Water Absorb
+Tera Type: Water
+EVs: 132 HP / 252 SpA / 124 Spe
+Modest Nature
+- Steam Eruption
+- Flamethrower
+- Earth Power
+- Sludge Bomb
+
+Landorus-Therian @ Choice Scarf
+Ability: Intimidate
+Tera Type: Flying
+EVs: 4 HP / 252 Atk / 252 Spe
+Jolly Nature
+- Earthquake
+- Rock Slide
+- U-turn
+- Tera Blast
+
+Rillaboom @ Assault Vest
+Ability: Grassy Surge
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Grassy Glide
+- Wood Hammer
+- U-turn
+
+Iron Hands @ Safety Goggles
+Ability: Quark Drive
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Drain Punch
+- Wild Charge
+- Protect
+
+Dragapult @ Life Orb
+Ability: Infiltrator
+Tera Type: Ghost
+EVs: 4 Atk / 252 SpA / 252 Spe
+Naive Nature
+- Draco Meteor
+- Shadow Ball
+- U-turn
+- Protect
+

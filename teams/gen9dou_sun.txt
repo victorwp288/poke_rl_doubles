@@ -1,0 +1,61 @@
+Torkoal @ Charcoal
+Ability: Drought
+Tera Type: Grass
+EVs: 252 HP / 252 SpA / 4 SpD
+Modest Nature
+- Eruption
+- Heat Wave
+- Solar Beam
+- Protect
+
+Lilligant-Hisui @ Focus Sash
+Ability: Chlorophyll
+Tera Type: Grass
+EVs: 4 HP / 252 Atk / 252 Spe
+Jolly Nature
+- Leaf Blade
+- Sleep Powder
+- After You
+- Protect
+
+Tornadus @ Covert Cloak
+Ability: Prankster
+Tera Type: Ghost
+EVs: 252 HP / 4 SpA / 252 Spe
+Timid Nature
+- Tailwind
+- Bleakwind Storm
+- Taunt
+- Protect
+
+Rillaboom @ Assault Vest
+Ability: Grassy Surge
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Grassy Glide
+- Wood Hammer
+- U-turn
+
+Iron Hands @ Safety Goggles
+Ability: Quark Drive
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Drain Punch
+- Wild Charge
+- Volt Switch
+
+Amoonguss @ Rocky Helmet
+Ability: Regenerator
+Tera Type: Water
+EVs: 252 HP / 156 Def / 100 SpD
+Sassy Nature
+IVs: 0 Spe
+- Spore
+- Rage Powder
+- Pollen Puff
+- Protect
+

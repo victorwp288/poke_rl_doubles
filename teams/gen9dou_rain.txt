@@ -1,0 +1,60 @@
+Pelipper @ Damp Rock
+Ability: Drizzle
+Tera Type: Water
+EVs: 252 HP / 4 Def / 252 SpD
+Calm Nature
+- Hurricane
+- Tailwind
+- Wide Guard
+- Roost
+
+Barraskewda @ Life Orb
+Ability: Swift Swim
+Tera Type: Water
+EVs: 4 HP / 252 Atk / 252 Spe
+Jolly Nature
+- Liquidation
+- Close Combat
+- Aqua Jet
+- Protect
+
+Zapdos @ Assault Vest
+Ability: Static
+Tera Type: Electric
+EVs: 252 HP / 4 Def / 252 SpA
+Modest Nature
+- Thunderbolt
+- Hurricane
+- Heat Wave
+- Volt Switch
+
+Rillaboom @ Assault Vest
+Ability: Grassy Surge
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Grassy Glide
+- Wood Hammer
+- U-turn
+
+Iron Hands @ Safety Goggles
+Ability: Quark Drive
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Drain Punch
+- Wild Charge
+- Protect
+
+Amoonguss @ Rocky Helmet
+Ability: Regenerator
+Tera Type: Water
+EVs: 252 HP / 156 Def / 100 SpD
+Sassy Nature
+IVs: 0 Spe
+- Spore
+- Rage Powder
+- Pollen Puff
+- Protect

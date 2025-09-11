@@ -1,0 +1,60 @@
+Tyranitar @ Smooth Rock
+Ability: Sand Stream
+Tera Type: Flying
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Rock Slide
+- Crunch
+- Low Kick
+- Protect
+
+Excadrill @ Life Orb
+Ability: Sand Rush
+Tera Type: Steel
+EVs: 4 HP / 252 Atk / 252 Spe
+Jolly Nature
+- Iron Head
+- Earthquake
+- Rock Slide
+- Protect
+
+Landorus-Therian @ Choice Scarf
+Ability: Intimidate
+Tera Type: Flying
+EVs: 4 HP / 252 Atk / 252 Spe
+Jolly Nature
+- Earthquake
+- Rock Slide
+- U-turn
+- Tera Blast
+
+Rotom-Wash @ Sitrus Berry
+Ability: Levitate
+Tera Type: Grass
+EVs: 252 HP / 4 Def / 252 SpD
+Calm Nature
+- Hydro Pump
+- Thunderbolt
+- Will-O-Wisp
+- Protect
+
+Rillaboom @ Assault Vest
+Ability: Grassy Surge
+Tera Type: Grass
+EVs: 252 HP / 252 Atk / 4 SpD
+Adamant Nature
+- Fake Out
+- Grassy Glide
+- Wood Hammer
+- U-turn
+
+Heatran @ Shuca Berry
+Ability: Flash Fire
+Tera Type: Grass
+EVs: 252 HP / 252 SpA / 4 SpD
+Modest Nature
+- Heat Wave
+- Earth Power
+- Flash Cannon
+- Protect
+
