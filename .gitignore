@@ -232,6 +232,11 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+data/*
+
+
+# Artifacts
+
 #
 plan/
 #
