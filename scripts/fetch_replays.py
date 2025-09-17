@@ -86,7 +86,7 @@ def best_effort_user_search(user: str, fmt: str, limit: int, user_agent: str) ->
             if not isinstance(item, dict):
                 continue
             replay_id = item.get("id") or item.get("replayid") or item.get("uploadid")
-            if isinstance(replay_id, str) and fmt in replay_id:
+            if isinstance(replay_id, str) and replay_id.startswith(f"{fmt}-"):
                 ids.append(replay_id)
             if len(ids) >= limit:
                 break
