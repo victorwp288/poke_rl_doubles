@@ -55,6 +55,16 @@ override values per experiment.
 ## Security & Server Etiquette
 - Never commit secrets or account tokens. Prefer environment variables and
   `configs/*.yml`.
-- Be polite with Showdown servers: rate‑limit requests and prefer a local
+- Be polite with Showdown servers: rate-limit requests and prefer a local
   server for heavy training.
+
+## Data & Storage Guidance
+- Primary datasets (`data/imitation.jsonl`, `data/human_hints.jsonl`) stay in append-only JSONL
+  until they approach ~1 GB or ~250k records. Stream them during training rather than loading the
+  entire file at once.
+- Once a dataset passes that threshold, migrate it into the lightweight SQLite cache (schema in
+  `db/schema.py`) so deduping and random access stay fast. Keep the JSONL as a raw backup.
+- When adding richer fields (e.g., move metadata, targets), bump the schema version in the files so
+  loaders can gracefully handle mixed granularity.
+
 
