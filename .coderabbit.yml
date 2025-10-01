@@ -1,5 +1,6 @@
 reviews:
   path_filters:
+    - "**"
     - "!outputs/**"
     - "!data/**"
     - "!teams/**"
