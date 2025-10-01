@@ -1,0 +1,6 @@
+ignore:
+  - "outputs/**"
+  - "data/**"
+  - "teams/**"
+  - "docs/**"
+  - "outputs/**"
