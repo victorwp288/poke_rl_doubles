@@ -232,7 +232,17 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-data/*
+data/cache/*
+data/processed/*
+data/raw/downloaded/*
+data/raw/showdown_logs/*
+data/source/*
+data/replays_raw/*
+data/replays_processed/*
+data/replays_raw/*
+docs/plan.md
+docs/plan_data_and_training.md
+docs/next_steps.txt
 
 
 # Artifacts

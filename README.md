@@ -22,6 +22,15 @@ pip install -r requirements.txt
 
 # smoke‑test the environment
 python tests/smoke_test_env.py
+
+# collect imitation data (optional, edit defaults in tools/imitation_collect.py first)
+python tools/imitation_collect.py
+
+# train the behavior cloning policy
+python tools/offline.py
+
+# inspect losses in TensorBoard
+tensorboard --logdir outputs/tensorboard
 ```
 
 ## Development
@@ -31,19 +40,26 @@ python tests/smoke_test_env.py
 
 ## Project Structure
 - `src/` — reusable library code (Python 3.11)
-- `scripts/` — CLI entry points (training/eval)
-- `configs/` — YAML configs (see `configs/default.yml`)
+  - `src/core/` — shared helpers and environment wiring
+  - `src/offline/` — dataset loader, policy, trainer
+  - `src/online/` — reserved for PPO work
+- `tools/` — simple entry points (train offline, sweep, data fetch/parse)
 - `tests/` — smoke tests and simple unit tests
-- `web/` — lightweight Gradio viewer (not required)
 - `docs/` — notes and design docs
 - `teams/` — example Pokémon team exports for experiments
 
 
 
 ## Configuration
-Default PPO and environment settings live in `configs/default.yml` (seed,
-format, PPO hyper‑parameters, and model sizes). You can duplicate this file and
-override values per experiment.
+- Offline defaults live in `src/offline/config.py`.
+- You can edit the dataclass or pass overrides in `tools/offline.py` as needed.
+- Offline trainer saves checkpoints under `outputs/models/` and TensorBoard events under `outputs/tensorboard/`.
+
+## Offline Pipeline
+- Collect imitation dataset: run `python tools/imitation_collect.py` (tweak `DEFAULT_SETTINGS` for custom formats/teams).
+- Pretrain behavior cloning policy: run `python tools/offline.py` to fit `BehaviorCloningPolicy`; per-epoch losses are printed and logged to TensorBoard when available.
+- Monitor training: launch `tensorboard --logdir outputs/tensorboard` to inspect loss curves.
+- Consume the policy: load `outputs/models/bc_policy.pt` into offline evaluation or PPO fine-tuning.
 
 ## Style & Conventions
 - Formatting via Ruff: line length 100, double quotes, LF, 4‑space indent.
@@ -53,18 +69,15 @@ override values per experiment.
 - Add type hints for new public functions; run `mypy src` locally before PRs.
 
 ## Security & Server Etiquette
-- Never commit secrets or account tokens. Prefer environment variables and
-  `configs/*.yml`.
+- Never commit secrets or account tokens. Prefer environment variables or
+  plain Python config files under `data/sources/` when needed.
 - Be polite with Showdown servers: rate-limit requests and prefer a local
   server for heavy training.
 
 ## Data & Storage Guidance
-- Primary datasets (`data/imitation.jsonl`, `data/human_hints.jsonl`) stay in append-only JSONL
-  until they approach ~1 GB or ~250k records. Stream them during training rather than loading the
-  entire file at once.
-- Once a dataset passes that threshold, migrate it into the lightweight SQLite cache (schema in
-  `db/schema.py`) so deduping and random access stay fast. Keep the JSONL as a raw backup.
-- When adding richer fields (e.g., move metadata, targets), bump the schema version in the files so
-  loaders can gracefully handle mixed granularity.
+- Processed datasets live under `data/processed/` (e.g., `imitation.jsonl`, `human_hints.jsonl`).
+- Raw replays stay in `data/raw/` (`downloaded/`, `showdown_logs/`).
+- Model artifacts and run outputs go to `outputs/` (subfolders for `models/`, `tensorboard/`, `plots/`).
+- Keep JSONL append-only until they approach ~1 GB, then consider caching in SQLite if needed.
 
 
