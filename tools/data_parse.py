@@ -129,7 +129,7 @@ def parse_replay(path: Path) -> list[HintEvent]:
 
 def main() -> None:
     raw_dir = Path("data/raw/downloaded")
-    out_path = Path("data/human_hints.jsonl")
+    out_path = Path("data/processed/human_hints.jsonl")
     focus_side = "p1"
     raw_dir.mkdir(parents=True, exist_ok=True)
     out_path.parent.mkdir(parents=True, exist_ok=True)
