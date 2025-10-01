@@ -1,6 +1,6 @@
-ignore:
-  - "outputs/**"
-  - "data/**"
-  - "teams/**"
-  - "docs/**"
-  - "outputs/**"
+reviews:
+  path_filters:
+    - "!outputs/**"
+    - "!data/**"
+    - "!teams/**"
+    - "!docs/**"
