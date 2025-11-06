@@ -5,3 +5,4 @@ reviews:
     - "!data/**"
     - "!teams/**"
     - "!docs/**"
+    - "!runs/**"

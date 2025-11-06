@@ -10,6 +10,9 @@
 # Icon must end with two \r
 Icon
 
+.cursor
+.matplotlib
+
 
 # Thumbnails
 ._*
@@ -244,6 +247,14 @@ docs/plan.md
 docs/plan_data_and_training.md
 docs/next_steps.txt
 
+
+outputs/eval/*
+outputs/models/*
+outputs/tensorboard/*
+outputs/plots/*
+outputs/sweeps/online*
+outputs/logs/*
+outputs/runs/*
 
 # Artifacts
 

@@ -1,88 +1,76 @@
-# Helpers to read the imitation dataset JSONL files
-
-from __future__ import annotations
-
 import json
 import random
-from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(slots=True)
-class ImitationSample:
-    observation: list[float]
-    actions: list[int]
-    mask: list[list[int]]
+def _as_float_list(raw):
+    if not isinstance(raw, list):
+        raise ValueError
+    values = []
+    for value in raw:
+        values.append(float(value))
+    return values
 
 
-def _coerce_observation(raw_obs: object) -> list[float] | None:
-    if not isinstance(raw_obs, list):
-        return None
-    try:
-        return [float(value) for value in raw_obs]
-    except (TypeError, ValueError):
-        return None
+def _as_int_list(raw):
+    if not isinstance(raw, list):
+        raise ValueError
+    values = []
+    for value in raw:
+        values.append(int(value))
+    return values
 
 
-def _coerce_actions(raw_actions: object) -> list[int] | None:
-    if not isinstance(raw_actions, list):
-        return None
-    try:
-        choices = [int(value) for value in raw_actions]
-    except (TypeError, ValueError):
-        return None
-    if len(choices) != 2:
-        return None
-    return choices
-
-
-def _coerce_mask(raw_mask: object) -> list[list[int]] | None:
-    if not isinstance(raw_mask, list):
-        return None
-    parsed: list[list[int]] = []
-    width: int | None = None
-    for slot in raw_mask:
+def _as_mask(raw):
+    if not isinstance(raw, list):
+        raise ValueError
+    parsed = []
+    width = None
+    for slot in raw:
         if not isinstance(slot, list):
-            return None
-        slot_mask: list[int] = []
+            raise ValueError
+        slot_mask = []
         for entry in slot:
-            try:
-                slot_mask.append(1 if int(entry) else 0)
-            except (TypeError, ValueError):
-                return None
+            slot_mask.append(1 if int(entry) else 0)
         if width is None:
             width = len(slot_mask)
         elif len(slot_mask) != width:
-            return None
+            raise ValueError
         parsed.append(slot_mask)
+    if not parsed:
+        raise ValueError
     return parsed
 
 
-def _parse_payload(payload: dict[str, object]) -> ImitationSample | None:
-    observation = _coerce_observation(payload.get("obs_v0"))
-    actions = _coerce_actions(payload.get("action"))
-    mask = _coerce_mask(payload.get("mask"))
-    if observation is None or actions is None or mask is None:
-        return None
+def _valid_actions(actions, mask):
+    if len(actions) != len(mask):
+        return False
     for choice, slot_mask in zip(actions, mask, strict=False):
-        if not (0 <= choice < len(slot_mask)) or not slot_mask[choice]:
-            return None
-    return ImitationSample(observation=observation, actions=actions, mask=mask)
+        if choice < 0 or choice >= len(slot_mask):
+            return False
+        if not slot_mask[choice]:
+            return False
+    return True
 
 
-def load_samples(
-    dataset_path: Path,
-    *,
-    max_samples: int | None = None,
-    seed: int = 0,
-    shuffle: bool = True,
-) -> list[ImitationSample]:
+def _parse_payload(payload):
+    if not isinstance(payload, dict):
+        raise ValueError
+    observation = _as_float_list(payload.get("observation"))
+    actions = _as_int_list(payload.get("action"))
+    mask = _as_mask(payload.get("mask"))
+    if len(actions) != 2:
+        raise ValueError
+    if not _valid_actions(actions, mask):
+        raise ValueError
+    return observation, actions, mask
+
+
+def load_samples(dataset_path, max_samples=None, seed=0, shuffle=True):
     path = Path(dataset_path)
     if not path.exists():
-        raise FileNotFoundError(f"Dataset not found: {path}")
-
-    samples: list[ImitationSample] = []
+        raise FileNotFoundError(f"missing dataset: {path}")
+    samples = []
     with path.open("r", encoding="utf-8") as handle:
         for raw_line in handle:
             line = raw_line.strip()
@@ -90,40 +78,27 @@ def load_samples(
                 continue
             try:
                 payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, dict):
                 sample = _parse_payload(payload)
-                if sample:
-                    samples.append(sample)
-
+            except Exception:
+                continue
+            samples.append(sample)
     if not samples:
-        raise ValueError(f"No usable records in {path}")
-
+        raise ValueError(f"no usable records in {path}")
     if shuffle:
         random.Random(seed).shuffle(samples)
-
     if max_samples and max_samples > 0:
         samples = samples[:max_samples]
-
     return samples
 
 
-def split_train_val(
-    samples: Iterable[ImitationSample], *, val_fraction: float
-) -> tuple[list[ImitationSample], list[ImitationSample]]:
+def split_train_val(samples, val_fraction):
     items = list(samples)
     if not items or val_fraction <= 0:
         return items, []
-
     if len(items) == 1:
         return items, []
-
     val_count = max(1, int(len(items) * val_fraction))
     val_count = min(val_count, len(items) - 1)
     val_split = items[:val_count]
     train_split = items[val_count:]
     return train_split, val_split
-
-
-__all__ = ["ImitationSample", "load_samples", "split_train_val"]

@@ -1,42 +1,32 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 import json
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import urllib.robotparser
-from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.config import section  # noqa: E402
 
 BASE_URL = "https://replay.pokemonshowdown.com"
 USER_AGENT_DEFAULT = "poke-rl/0.1 (+contact: none)"
 
-DEFAULT_OUT_DIR = Path("data/raw/downloaded")
-DEFAULT_IDS_FILE = Path("data/sources/replays/ids.txt")
-DEFAULT_URLS_FILE = Path("data/sources/replays/urls.txt")
-DEFAULT_IDS: list[str] = []
-DEFAULT_USER = None
-DEFAULT_FORMAT = "gen9doublesou"
-DEFAULT_LIMIT = 200
-DEFAULT_RATE = 0.5
-DEFAULT_USER_AGENT = USER_AGENT_DEFAULT
-DEFAULT_OVERWRITE = False
-CONFIG_PATH = Path("tools/data_fetch_config.json")
 
-
-def read_lines(path: Path | None) -> list[str]:
-    if not path:
+def read_lines(path):
+    if not path or not Path(path).exists():
         return []
-    if not path.exists():
-        return []
-    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    content = Path(path).read_text(encoding="utf-8")
+    return [line.strip() for line in content.splitlines() if line.strip()]
 
 
-def normalize_token(token: str) -> tuple[str, str]:
+def normalize_token(token):
     token = token.strip()
     if token.startswith("http://") or token.startswith("https://"):
         parsed = urllib.parse.urlparse(token)
@@ -45,7 +35,7 @@ def normalize_token(token: str) -> tuple[str, str]:
     return token, f"{BASE_URL}/{token}"
 
 
-def load_robots(url: str) -> urllib.robotparser.RobotFileParser:
+def load_robots(url):
     robots = urllib.robotparser.RobotFileParser()
     robots.set_url(urllib.parse.urljoin(url, "/robots.txt"))
     try:
@@ -55,13 +45,13 @@ def load_robots(url: str) -> urllib.robotparser.RobotFileParser:
     return robots
 
 
-def http_get(url: str, user_agent: str, timeout: float = 15.0) -> bytes:
+def http_get(url, user_agent, timeout=15.0):
     request = urllib.request.Request(url, headers={"User-Agent": user_agent})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read()
 
 
-def try_fetch_variants(replay_id: str, user_agent: str) -> tuple[bytes | None, str | None]:
+def try_fetch_variants(replay_id, user_agent):
     for ext in (".json", ".log", ""):
         url = f"{BASE_URL}/{replay_id}{ext}"
         try:
@@ -77,19 +67,17 @@ def try_fetch_variants(replay_id: str, user_agent: str) -> tuple[bytes | None, s
     return None, None
 
 
-def best_effort_user_search(user: str, fmt: str, limit: int, user_agent: str) -> list[str]:
-    ids: list[str] = []
+def best_effort_user_search(user, fmt, limit, user_agent):
+    ids = []
     try:
         query = urllib.parse.urlencode({"user": user, "format": fmt, "output": "json"})
         payload = http_get(f"{BASE_URL}/search.json?{query}", user_agent)
         data = json.loads(payload.decode("utf-8", errors="ignore"))
-        records: Iterable[dict[str, object]]
+        records = []
         if isinstance(data, dict) and isinstance(data.get("replays"), list):
-            records = data["replays"]  # type: ignore[index]
+            records = data["replays"]
         elif isinstance(data, list):
-            records = data  # type: ignore[assignment]
-        else:
-            records = []
+            records = data
         for item in records:
             if not isinstance(item, dict):
                 continue
@@ -112,33 +100,22 @@ def best_effort_user_search(user: str, fmt: str, limit: int, user_agent: str) ->
         return []
 
 
-@dataclass
-class Settings:
-    out_dir: Path
-    ids_file: Path | None
-    urls_file: Path | None
-    ids: list[str]
-    user: str | None
-    fmt: str
-    limit: int
-    rate: float
-    user_agent: str
-    overwrite: bool
-
-
-def collect_targets(settings: Settings) -> list[str]:
-    raw_tokens: list[str] = []
-    raw_tokens.extend(read_lines(settings.ids_file))
-    raw_tokens.extend(read_lines(settings.urls_file))
-    raw_tokens.extend(settings.ids)
-    if settings.user:
+def collect_targets(settings):
+    raw_tokens = []
+    raw_tokens.extend(read_lines(settings.get("ids_file")))
+    raw_tokens.extend(read_lines(settings.get("urls_file")))
+    raw_tokens.extend(settings.get("ids", []))
+    if settings.get("user"):
         raw_tokens.extend(
             best_effort_user_search(
-                settings.user, settings.fmt, settings.limit, settings.user_agent
+                settings["user"],
+                settings["format"],
+                settings["limit"],
+                settings["user_agent"],
             )
         )
-    seen: set[str] = set()
-    replay_ids: list[str] = []
+    seen = set()
+    replay_ids = []
     for token in raw_tokens:
         replay_id, _ = normalize_token(token)
         if replay_id not in seen:
@@ -147,11 +124,12 @@ def collect_targets(settings: Settings) -> list[str]:
     return replay_ids
 
 
-def run(settings: Settings) -> None:
-    settings.out_dir.mkdir(parents=True, exist_ok=True)
+def run(settings):
+    out_dir = Path(settings["out_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
     robots = load_robots(BASE_URL)
-    user_agent = settings.user_agent or USER_AGENT_DEFAULT
-    index_path = settings.out_dir / "index.json"
+    user_agent = settings.get("user_agent") or USER_AGENT_DEFAULT
+    index_path = out_dir / "index.json"
     try:
         index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else {}
     except Exception:
@@ -159,14 +137,15 @@ def run(settings: Settings) -> None:
 
     replay_ids = collect_targets(settings)
     if not replay_ids:
-        print("no targets provided. use --ids/--urls or --user to discover replays.")
+        print("no targets provided. use config entries to supply ids, urls, or user.")
         return
 
-    delay = 1.0 / max(settings.rate, 0.1)
+    rate = float(settings.get("rate", 0.5))
+    delay = 1.0 / max(rate, 0.1)
     fetched = 0
     for replay_id in replay_ids:
-        base_path = settings.out_dir / replay_id
-        if not settings.overwrite and any(
+        base_path = out_dir / replay_id
+        if not settings.get("overwrite") and any(
             base_path.with_suffix(suffix).exists() for suffix in (".json", ".log", ".html")
         ):
             continue
@@ -190,62 +169,44 @@ def run(settings: Settings) -> None:
             "format": replay_id.split("-")[0],
         }
         fetched += 1
-        if settings.rate > 0:
+        if rate > 0:
             time.sleep(delay)
 
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
-    print(f"fetched {fetched} / {len(replay_ids)} replays into {settings.out_dir}")
+    print(f"fetched {fetched} / {len(replay_ids)} replays into {out_dir}")
 
 
-def default_settings() -> Settings:
-    config = {
-        "out_dir": str(DEFAULT_OUT_DIR),
-        "ids_file": str(DEFAULT_IDS_FILE),
-        "urls_file": str(DEFAULT_URLS_FILE),
-        "ids": list(DEFAULT_IDS),
-        "user": DEFAULT_USER,
-        "format": DEFAULT_FORMAT,
-        "limit": DEFAULT_LIMIT,
-        "rate": DEFAULT_RATE,
-        "user_agent": DEFAULT_USER_AGENT,
-        "overwrite": DEFAULT_OVERWRITE,
-    }
-    if CONFIG_PATH.exists():
-        try:
-            payload = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-            if isinstance(payload, dict):
-                config.update(payload)
-        except Exception:
-            pass
-    ids_file = Path(config["ids_file"])
-    urls_file = Path(config["urls_file"])
-    return Settings(
-        out_dir=Path(config["out_dir"]),
-        ids_file=ids_file if ids_file.exists() else None,
-        urls_file=urls_file if urls_file.exists() else None,
-        ids=list(config.get("ids", [])),
-        user=config.get("user"),
-        fmt=config.get("format", DEFAULT_FORMAT),
-        limit=int(config.get("limit", DEFAULT_LIMIT)),
-        rate=float(config.get("rate", DEFAULT_RATE)),
-        user_agent=config.get("user_agent", DEFAULT_USER_AGENT),
-        overwrite=bool(config.get("overwrite", DEFAULT_OVERWRITE)),
-    )
+def load_settings():
+    config = section("data_fetch")
+    settings = {}
+    settings["out_dir"] = Path(config.get("out_dir", "data/raw/downloaded"))
+    ids_file = Path(config.get("ids_file", ""))
+    settings["ids_file"] = ids_file if ids_file.exists() else None
+    urls_file = Path(config.get("urls_file", ""))
+    settings["urls_file"] = urls_file if urls_file.exists() else None
+    settings["ids"] = list(config.get("ids", []))
+    settings["user"] = config.get("user")
+    settings["format"] = config.get("format", "gen9doublesou")
+    settings["limit"] = int(config.get("limit", 200))
+    settings["rate"] = float(config.get("rate", 0.5))
+    settings["user_agent"] = config.get("user_agent") or USER_AGENT_DEFAULT
+    settings["overwrite"] = bool(config.get("overwrite", False))
+    return settings
 
 
-def main() -> None:
-    settings = default_settings()
+def main():
+    settings = load_settings()
     print("data fetch settings:")
-    print(f"  out_dir={settings.out_dir}")
-    print(f"  ids_file={settings.ids_file}")
-    print(f"  urls_file={settings.urls_file}")
-    print(f"  ids={settings.ids}")
-    print(f"  user={settings.user}")
-    print(f"  format={settings.fmt}")
-    print(f"  limit={settings.limit}")
-    print(f"  rate={settings.rate}")
-    print(f"  user_agent={settings.user_agent}")
-    print(f"  overwrite={settings.overwrite}")
+    print(f"  out_dir={settings['out_dir']}")
+    print(f"  ids_file={settings['ids_file']}")
+    print(f"  urls_file={settings['urls_file']}")
+    print(f"  ids={settings['ids']}")
+    print(f"  user={settings['user']}")
+    print(f"  format={settings['format']}")
+    print(f"  limit={settings['limit']}")
+    print(f"  rate={settings['rate']}")
+    print(f"  user_agent={settings['user_agent']}")
+    print(f"  overwrite={settings['overwrite']}")
     run(settings)
 
 
