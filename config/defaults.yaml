@@ -1,0 +1,176 @@
+offline:
+  dataset_path: data/processed/imitation.jsonl
+  policy_path: outputs/models/bc_policy.pt
+  stats_path: outputs/models/bc_stats.json
+  tensorboard_dir: outputs/tensorboard
+  batch_size: 4096
+  learning_rate: 0.0005
+  weight_decay: 0.0001
+  label_smoothing: 0.1
+  hidden_dim: 1024
+  hidden_layers: 4
+  dropout: 0.2
+  obs_noise_std: 0.015
+  epochs: 50
+  val_fraction: 0.1
+  max_samples: null
+  grad_clip_norm: 1.0
+  seed: 0
+  device: null
+  shuffle: true
+  log_every: 50
+data_fetch:
+  out_dir: data/raw/downloaded
+  ids_file: data/sources/replays/ids.txt
+  urls_file: data/sources/replays/urls.txt
+  ids: []
+  user: null
+  format: gen9doublesou
+  limit: 200
+  rate: 0.5
+  user_agent: "poke-rl/0.1 (+contact: none)"
+  overwrite: false
+data_parse:
+  raw_dir: data/raw/downloaded
+  out_path: data/processed/human_hints.jsonl
+  focus_side: p1
+imitation_collect:
+  n_battles: 50
+  server_url: http://localhost:8000
+  battle_format: gen9doublesou
+  our_team_path: teams/gen9dou_fixed.txt
+  opponent_teams_dir: teams
+  teacher_kind: simple
+  opponents: [simple, maxbp, random]
+  out_path: data/processed/imitation.jsonl
+  battle_timeout: 60.0
+  rotate_every: null
+online:
+  battle_format: "gen9doublesou"
+  policy_hidden_dim: 1024
+  policy_hidden_layers: 4
+  server_url: http://localhost:8000
+  team_path: teams/gen9dou_fixed.txt
+  player_name_prefix: RLAgent
+  opponent_name_prefix: SimpleHeuristics
+  rate_limit_per_second: null
+  base_rewards:
+    win: 1.0
+    loss: -1.0
+    faint: 0.1
+    team_hp: 0.05
+    active_hp: 0.1
+    status: 0.05
+    side_condition: 0.05
+    draw: -0.1
+  modes:
+    scratch:
+      total_timesteps: 300000
+      learning_rate: 0.0003
+      n_steps: 1024
+      batch_size: 256
+      parallel_battles: 6
+      load_bc: false
+      eval_freq: 9216
+      eval_episodes: 5
+      checkpoint_freq: 6144
+      checkpoint_keep_last: 1
+      entropy_coef: 0.0
+      kl_coef_start: 0.02
+      kl_coef_final: 0.0
+      kl_anneal_steps: 2000
+      target_kl: 0.02
+      tensorboard_dir: outputs/tensorboard/online/scratch
+      policy_path: outputs/models/maskable_ppo_scratch.zip
+      log_interval: 2048
+      rewards: {}
+    warmstart:
+      total_timesteps: 300000
+      learning_rate: 0.0003
+      n_steps: 1024
+      batch_size: 256
+      parallel_battles: 6
+      load_bc: true
+      bc_checkpoint: outputs/models/bc_policy_best.pt
+      eval_freq: 9216
+      eval_episodes: 5
+      checkpoint_freq: 6144
+      checkpoint_keep_last: 1
+      entropy_coef: 0.0
+      kl_coef_start: 0.02
+      kl_coef_final: 0.0
+      kl_anneal_steps: 2000
+      target_kl: 0.02
+      tensorboard_dir: outputs/tensorboard/online/warmstart
+      policy_path: outputs/models/maskable_ppo_warmstart.zip
+      log_interval: 2048
+      rewards:
+        win: 1.5
+        loss: -1.5
+        faint: 0.15
+        team_hp: 0.075
+        active_hp: 0.12
+        status: 0.06
+        side_condition: 0.06
+        draw: -0.2
+imitation_batches:
+  heuristics_bulk:
+    replicas: 12
+    seed_start: 0
+    out_path_prefix: data/processed/imitation/shards/heuristics
+    settings:
+      teacher_kind: simple
+      opponents: [simple, maxbp, random]
+      n_battles: 150
+      rotate_every: 5000
+      max_concurrent_battles: 1
+  curated_pool:
+    replicas: 4
+    seed_start: 100
+    out_path_prefix: data/processed/imitation/shards/curated
+    settings:
+      teacher_kind: simple
+      opponents: [simple, maxbp]
+      opponent_teams_dir: teams
+      our_team_path: teams/gen9dou_fixed.txt
+      n_battles: 50
+      rotate_every: null
+      max_concurrent_battles: 1
+evaluation:
+  bc_vs_bots:
+    episodes: 10
+    opponent: simple
+    opponent_pool: [simple, maxbp, random]
+    battle_format: gen9doublesou
+    tensorboard_dir: outputs/tensorboard/eval
+    output_path: outputs/eval/bc_vs_bots.jsonl
+    checkpoint: outputs/models/bc_policy.pt
+    stats_path: outputs/models/bc_stats.json
+    our_team_path: teams/gen9dou_fixed.txt
+    server_url: http://localhost:8000
+ppo_runs:
+  - warmstart
+  - scratch
+imitation_merge:
+  output_path: data/processed/imitation.jsonl
+  sources:
+    - data/processed/imitation/shards/heuristics
+    - data/processed/imitation/shards/curated
+
+offline_sweeps:
+  hidden_dim: [1024]
+  dropout: [0.2]
+  learning_rate: [0.0005, 0.0003]
+  label_smoothing: [0.1]
+  obs_noise_std: [0.015, 0.01]
+
+online_sweeps:
+  modes: [warmstart, scratch]
+  learning_rate: [0.0003, 0.0002]
+  entropy_coef: [0.01, 0.005]
+  total_timesteps: [150000, 300000]
+  policy_hidden_dim: [1024]
+  policy_hidden_layers: [4]
+  kl_coef_start: [0.02, 0.01]
+  kl_anneal_steps: [1000, 2000]
+  target_kl: [0.02, 0.015]

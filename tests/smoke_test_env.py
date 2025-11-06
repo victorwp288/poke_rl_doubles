@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""Quick dependency check for the project."""
-
-from __future__ import annotations
 
 import contextlib
 import importlib
@@ -14,7 +11,7 @@ REQUIRED_IMPORTS = (
 )
 
 
-def try_import(name: str):
+def try_import(name):
     try:
         module = importlib.import_module(name)
         print(f"[OK]   {name}")
@@ -24,7 +21,7 @@ def try_import(name: str):
         return None
 
 
-def check_torch_devices(torch_module) -> None:
+def check_torch_devices(torch_module):
     if torch_module is None:
         return
     cuda_ok = torch_module.cuda.is_available()
@@ -41,7 +38,7 @@ def check_torch_devices(torch_module) -> None:
         print(f"[WARN] torch compute failed on {device}: {exc}")
 
 
-def connect_showdown() -> None:
+def connect_showdown():
     print("\n=== showdown connectivity ===")
     try:
         from poke_env import LocalhostServerConfiguration, ShowdownServerConfiguration
@@ -50,7 +47,7 @@ def connect_showdown() -> None:
         print(f"[WARN] poke-env random player not available: {exc}")
         return
 
-    def _try_connection(kind: str, configuration) -> None:
+    def _try_connection(kind, configuration):
         try:
             player = RandomPlayer(
                 battle_format="gen9doublesou",
@@ -73,7 +70,7 @@ def connect_showdown() -> None:
     _try_connection("showdown", ShowdownServerConfiguration)
 
 
-def write_plots() -> None:
+def write_plots():
     out_dir = Path("outputs/plots")
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -99,7 +96,7 @@ def write_plots() -> None:
         print(f"[WARN] plotting failed: {exc}")
 
 
-def main() -> None:
+def main():
     print("=== required imports ===")
     modules = {name: try_import(name) for name in REQUIRED_IMPORTS}
     if modules.get("torch") is not None:

@@ -1,18 +1,14 @@
-from __future__ import annotations
-
 import random
-from collections.abc import Iterable
-from pathlib import Path
 
-from poke_env.teambuilder import ConstantTeambuilder, Teambuilder, TeambuilderPokemon
+from poke_env.teambuilder import ConstantTeambuilder, Teambuilder
 
 
-def read_showdown_team(path: Path) -> str:
+def read_showdown_team(path):
     return path.read_text(encoding="utf-8").strip()
 
 
-def load_showdown_teams_from_dir(directory: Path) -> list[str]:
-    teams: list[str] = []
+def load_showdown_teams_from_dir(directory):
+    teams = []
     for file_path in sorted(directory.glob("*.txt")):
         try:
             team = read_showdown_team(file_path)
@@ -24,8 +20,8 @@ def load_showdown_teams_from_dir(directory: Path) -> list[str]:
 
 
 class RotatingTeambuilder(Teambuilder):
-    def __init__(self, teams: Iterable[str]):
-        parsed: list[list[TeambuilderPokemon]] = []
+    def __init__(self, teams):
+        parsed = []
         for raw in teams:
             if not raw or not raw.strip():
                 continue
@@ -43,5 +39,5 @@ class RotatingTeambuilder(Teambuilder):
         return random.choice(self._teams)
 
 
-def constant_team_from_text(team_text: str) -> ConstantTeambuilder:
+def constant_team_from_text(team_text):
     return ConstantTeambuilder(team_text)

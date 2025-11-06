@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # Collect tactical hints from showdown replay logs
 
-from __future__ import annotations
-
 import json
 import re
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.config import section  # noqa: E402
 
 MOVE_LINE = re.compile(r"^\|move\|(?P<side>p[12])(?P<slot>[ab])?: [^|]+\|(?P<move>[^|]+)")
 SWITCH_LINE = re.compile(r"^\|switch\|(?P<side>p[12])(?P<slot>[ab]): ")
@@ -16,7 +19,7 @@ PROTECT_MOVES = {"protect", "detect", "kingsshield", "silktrap", "spikyshield"}
 TAILWIND_MOVES = {"tailwind"}
 
 
-def _lines_from_blob(blob: bytes, ext: str) -> list[str]:
+def _lines_from_blob(blob, ext):
     if ext == ".json":
         try:
             payload = json.loads(blob.decode("utf-8", errors="ignore"))
@@ -33,17 +36,17 @@ def _lines_from_blob(blob: bytes, ext: str) -> list[str]:
     return [line for line in text.splitlines() if line.strip()]
 
 
-def iter_replay_files(raw_dir: Path) -> Iterator[Path]:
+def iter_replay_files(raw_dir):
     for path in sorted(raw_dir.glob("*")):
         if path.is_file() and path.suffix.lower() in {".json", ".log", ".html", ""}:
             yield path
 
 
-def _normalise_battle_tag(tag: str) -> str:
+def _normalise_battle_tag(tag):
     return tag if tag.startswith("battle-") else f"battle-{tag}"
 
 
-def _infer_format(tag: str) -> str | None:
+def _infer_format(tag):
     parts = tag.split("-")
     if not parts:
         return None
@@ -52,64 +55,40 @@ def _infer_format(tag: str) -> str | None:
     return parts[0]
 
 
-@dataclass(slots=True)
-class HintEvent:
-    turn: int
-    event: str
-    hint: str
-    side: str
-    slot: str | None
-
-    def to_json(self, replay_id: str, battle_tag: str, fmt: str | None) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "replay_id": replay_id,
-            "battle_tag": battle_tag,
-            "format": fmt,
-            "turn": self.turn,
-            "event": self.event,
-            "hint": self.hint,
-            "side": self.side,
-        }
-        if self.slot is not None:
-            payload["slot"] = self.slot
-        return payload
+def _make_hint(turn, event, hint, side, slot):
+    payload = {"turn": turn, "event": event, "hint": hint, "side": side}
+    if slot is not None:
+        payload["slot"] = slot
+    return payload
 
 
-def _hint_from_move(turn: int, line: re.Match[str]) -> Iterable[HintEvent]:
+def _hint_from_move(turn, line):
     move = line.group("move").strip().lower()
     slot = line.group("slot")
     side = line.group("side")
     if slot is None:
         return []
     if move in PROTECT_MOVES:
-        return [HintEvent(turn, event="protect", hint="protect", side=side, slot=slot)]
+        return [_make_hint(turn, "protect", "protect", side, slot)]
     if move in TAILWIND_MOVES:
-        return [HintEvent(turn, event="tailwind", hint="tailwind", side=side, slot=slot)]
+        return [_make_hint(turn, "tailwind", "tailwind", side, slot)]
     return []
 
 
-def _hint_from_switch(turn: int, line: re.Match[str]) -> Iterable[HintEvent]:
+def _hint_from_switch(turn, line):
     slot = line.group("slot")
     if slot is None:
         return []
-    return [
-        HintEvent(
-            turn,
-            event="switch",
-            hint="switch",
-            side=line.group("side"),
-            slot=slot,
-        )
-    ]
+    return [_make_hint(turn, "switch", "switch", line.group("side"), slot)]
 
 
-def parse_replay(path: Path) -> list[HintEvent]:
+def parse_replay(path):
     tag = path.stem
     battle_tag = _normalise_battle_tag(tag)
     fmt = _infer_format(tag)
     lines = _lines_from_blob(path.read_bytes(), path.suffix.lower())
-    hints: list[HintEvent] = []
-    turn: int | None = None
+    hints = []
+    turn = None
     for line in lines:
         turn_match = TURN_LINE.match(line)
         if turn_match:
@@ -124,13 +103,28 @@ def parse_replay(path: Path) -> list[HintEvent]:
         switch_match = SWITCH_LINE.match(line)
         if switch_match:
             hints.extend(_hint_from_switch(turn, switch_match))
-    return [event.to_json(tag, battle_tag, fmt) for event in hints]
+    payloads = []
+    for event in hints:
+        entry = {
+            "replay_id": tag,
+            "battle_tag": battle_tag,
+            "format": fmt,
+            "turn": event["turn"],
+            "event": event["event"],
+            "hint": event["hint"],
+            "side": event["side"],
+        }
+        if "slot" in event:
+            entry["slot"] = event["slot"]
+        payloads.append(entry)
+    return payloads
 
 
-def main() -> None:
-    raw_dir = Path("data/raw/downloaded")
-    out_path = Path("data/processed/human_hints.jsonl")
-    focus_side = "p1"
+def main():
+    config = section("data_parse")
+    raw_dir = Path(config.get("raw_dir", "data/raw/downloaded"))
+    out_path = Path(config.get("out_path", "data/processed/human_hints.jsonl"))
+    focus_side = config.get("focus_side")
     raw_dir.mkdir(parents=True, exist_ok=True)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     n_files = 0
