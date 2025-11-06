@@ -17,17 +17,31 @@ Prereqs: Python 3.11.
 
 ```bash
 
-# install deps
-pip install -r requirements.txt
+./init.sh
+
+# fallback manual install
+# pip install -r requirements.txt
 
 # smoke‑test the environment
 python tests/smoke_test_env.py
 
-# collect imitation data (optional, edit defaults in tools/imitation_collect.py first)
+# collect imitation data (optional, adjust config/defaults.yaml first)
 python tools/imitation_collect.py
+
+# merge shard outputs into a single dataset (uses imitation_merge config)
+python tools/imitation_merge.py
+
+# orchestrate multi-shard imitation batches (see config/imitation_batches)
+python tools/imitation_batch.py
 
 # train the behavior cloning policy
 python tools/offline.py
+
+# evaluate the BC policy against bots
+python tools/evaluate_bc.py
+
+# run warmstart + scratch PPO back to back
+python tools/run_ppo_compare.py
 
 # inspect losses in TensorBoard
 tensorboard --logdir outputs/tensorboard
@@ -51,12 +65,15 @@ tensorboard --logdir outputs/tensorboard
 
 
 ## Configuration
-- Offline defaults live in `src/offline/config.py`.
-- You can edit the dataclass or pass overrides in `tools/offline.py` as needed.
+- Defaults for offline, online, and data tooling live in `config/defaults.yaml`.
+- The `online` block mirrors the offline BC architecture via `policy_hidden_dim` / `policy_hidden_layers` so weight warmstarts succeed by default.
+- `imitation_batches`, `evaluation`, and `ppo_runs` blocks drive the orchestration helpers in `tools/`.
+- Both offline and PPO runs now emit a best-performing checkpoint alongside the latest weights; adjust `best_policy_path` / `best_stats_path` if you need custom locations.
+- Update the YAML to adjust paths, hyperparameters, or dataset sources.
 - Offline trainer saves checkpoints under `outputs/models/` and TensorBoard events under `outputs/tensorboard/`.
 
 ## Offline Pipeline
-- Collect imitation dataset: run `python tools/imitation_collect.py` (tweak `DEFAULT_SETTINGS` for custom formats/teams).
+- Collect imitation dataset: edit `config/defaults.yaml` and run `python tools/imitation_collect.py` for custom formats/teams.
 - Pretrain behavior cloning policy: run `python tools/offline.py` to fit `BehaviorCloningPolicy`; per-epoch losses are printed and logged to TensorBoard when available.
 - Monitor training: launch `tensorboard --logdir outputs/tensorboard` to inspect loss curves.
 - Consume the policy: load `outputs/models/bc_policy.pt` into offline evaluation or PPO fine-tuning.
@@ -79,5 +96,3 @@ tensorboard --logdir outputs/tensorboard
 - Raw replays stay in `data/raw/` (`downloaded/`, `showdown_logs/`).
 - Model artifacts and run outputs go to `outputs/` (subfolders for `models/`, `tensorboard/`, `plots/`).
 - Keep JSONL append-only until they approach ~1 GB, then consider caching in SQLite if needed.
-
-
