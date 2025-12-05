@@ -66,17 +66,44 @@ def _run_single(base_settings, overrides):
 
 def main():
     parser = argparse.ArgumentParser(description="Grid search for offline BC training")
+
     parser.add_argument("--limit", type=int, default=None, help="maximum number of runs")
+
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
         help="optional path to save sweep results (JSON)",
     )
+
+    parser.add_argument(
+        "--offline",
+        type=str,
+        default=None,
+        help="JSON dict to override offline base settings (e.g. '{\"lr\":1e-4}')",
+    )
+
+    parser.add_argument(
+        "--sweep",
+        type=str,
+        default=None,
+        help="JSON dict to override offline-sweeps config (e.g. '{\"lr\":[1e-4,1e-5]}')",
+    )
+
     args = parser.parse_args()
 
-    base_settings = dict(section("offline"))
-    sweep_config = section("offline_sweeps") or {}
+    if args.offline:
+        base_settings = json.loads(args.offline)
+        print("[offline-grid using CLI base offline settings override]")
+    else:
+        base_settings = dict(section("offline"))
+
+    if args.sweep:
+        sweep_config = json.loads(args.sweep)
+        print("[offline-grid using CLI sweep config override]")
+    else:
+        sweep_config = section("offline-sweeps")
+
     if not sweep_config:
         print("[offline-grid] no offline_sweeps configured")
         return

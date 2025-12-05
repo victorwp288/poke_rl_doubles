@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -87,9 +88,29 @@ def run_trial(base_settings, trial, root):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run offline sweep trials.")
+
+    parser.add_argument("--out-dir", type=str, help="Where to write sweep outputs.")
+    parser.add_argument("--dataset-path", type=str, help="Override offline.dataset_path")
+    parser.add_argument("--device", type=str, help="Override offline.device")
+    parser.add_argument("--epochs", type=int, help="Override offline.epochs")
+    parser.add_argument("--num-workers", type=int, help="Override offline.num_workers")
+
+    args = parser.parse_args()
+
     base = section("offline")
-    output_root = Path("outputs/offline_sweep")
-    output_root.mkdir(parents=True, exist_ok=True)
+
+    if args.dataset_path is not None:
+        base["dataset_path"] = args.dataset_path
+    if args.device is not None:
+        base["device"] = args.device
+    if args.epochs is not None:
+        base["epochs"] = args.epochs
+    if args.num_workers is not None:
+        base["num_workers"] = args.num_workers
+
+    output_root = Path(args.out_dir) if args.out_dir is not None else Path("outputs/offline_sweep")
+
     for trial in TRIALS:
         run_trial(base, trial, output_root)
 

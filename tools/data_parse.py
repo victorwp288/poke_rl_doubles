@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Collect tactical hints from showdown replay logs
-
+import argparse
 import json
 import re
 import sys
@@ -120,15 +120,65 @@ def parse_replay(path):
     return payloads
 
 
+def load_settings():
+    config = section("data_parse")
+    return {
+        "raw_dir": Path(config.get("raw_dir", "data/raw/downloaded")),
+        "out_path": Path(config.get("out_path", "data/processed/human_hints.jsonl")),
+        "focus_side": config.get("focus_side"),
+    }
+
+
+def build_arg_parser(defaults):
+    parser = argparse.ArgumentParser(description="Parse tactical hints from showdown replay logs")
+
+    parser.add_argument(
+        "--raw-dir",
+        type=Path,
+        default=defaults.get("raw_dir", Path("data/raw/downloaded")),
+        help="Directory containing raw replay files",
+    )
+    parser.add_argument(
+        "--out-path",
+        type=Path,
+        default=defaults.get("out_path", Path("data/processed/human_hints.jsonl")),
+        help="Output path for parsed hints",
+    )
+    parser.add_argument(
+        "--focus-side",
+        type=str,
+        choices=["p1", "p2"],
+        default=defaults.get("focus_side"),
+        help="If set, only include hints for the specified side",
+    )
+
+    return parser
+
+
+def merge_cli_overrides(defaults, args):
+    settings = defaults.copy()
+
+    for key in ["raw_dir", "out_path", "focus_side"]:
+        val = getattr(args, key)
+        if val is not None:
+            settings[key] = val
+
+    return settings
+
+
 def main():
     config = section("data_parse")
+
     raw_dir = Path(config.get("raw_dir", "data/raw/downloaded"))
     out_path = Path(config.get("out_path", "data/processed/human_hints.jsonl"))
     focus_side = config.get("focus_side")
+
     raw_dir.mkdir(parents=True, exist_ok=True)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
     n_files = 0
     n_events = 0
+
     with out_path.open("w", encoding="utf-8") as handle:
         for replay_path in iter_replay_files(raw_dir):
             try:
@@ -143,6 +193,7 @@ def main():
                 handle.write(json.dumps(event) + "\n")
                 n_events += 1
             n_files += 1
+
     print(f"parsed {n_events} events from {n_files} files -> {out_path}")
 
 

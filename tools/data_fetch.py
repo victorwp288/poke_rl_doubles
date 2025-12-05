@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import re
 import sys
@@ -194,19 +195,51 @@ def load_settings():
     return settings
 
 
+def build_arg_parser(defaults):
+    parser = argparse.ArgumentParser(description="Fetch Pokémon Showdown replays.")
+
+    parser.add_argument("--out-dir", type=Path, default=None)
+    parser.add_argument("--ids-file", type=Path, default=None)
+    parser.add_argument("--urls-file", type=Path, default=None)
+    parser.add_argument("--ids", nargs="*", default=None)
+    parser.add_argument("--user", type=str, default=None)
+    parser.add_argument("--format", type=str, default=None)
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--rate", type=float, default=None)
+    parser.add_argument("--user-agent", type=str, default=None)
+    parser.add_argument("--overwrite", action="store_true")
+
+    return parser
+
+
+def merge_cli_overrides(defaults, args):
+    settings = defaults.copy()
+
+    for key in [
+        "out_dir",
+        "ids_file",
+        "urls_file",
+        "ids",
+        "user",
+        "format",
+        "limit",
+        "rate",
+        "user_agent",
+        "overwrite",
+    ]:
+        val = getattr(args, key)
+        if val is not None:
+            settings[key] = val
+
+    return settings
+
+
 def main():
-    settings = load_settings()
-    print("data fetch settings:")
-    print(f"  out_dir={settings['out_dir']}")
-    print(f"  ids_file={settings['ids_file']}")
-    print(f"  urls_file={settings['urls_file']}")
-    print(f"  ids={settings['ids']}")
-    print(f"  user={settings['user']}")
-    print(f"  format={settings['format']}")
-    print(f"  limit={settings['limit']}")
-    print(f"  rate={settings['rate']}")
-    print(f"  user_agent={settings['user_agent']}")
-    print(f"  overwrite={settings['overwrite']}")
+    defaults = load_settings()
+    parser = build_arg_parser(defaults)
+    args = parser.parse_args()
+
+    settings = merge_cli_overrides(defaults, args)
     run(settings)
 
 
