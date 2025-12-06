@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -61,21 +62,62 @@ async def _run_batch(name, batch_cfg, base_settings):
         await task
 
 
+def build_arg_parser(defaults_batches):
+    parser = argparse.ArgumentParser(description="Run imitation learning data-collection batches")
+
+    parser.add_argument(
+        "--batches",
+        nargs="*",
+        help="Names of batches to run (defaults.yaml: imitation_batches). "
+        "If omitted, all batches are run.",
+    )
+
+    parser.add_argument(
+        "--override-settings",
+        type=str,
+        default=None,
+        help="JSON string of overrides applied to *every batch* (rarely needed). "
+        'Example: \'{"episodes": 30, "max_turns": 50}\'',
+    )
+
+    return parser
+
+
+def apply_global_overrides(base_settings, override_str):
+    if not override_str:
+        return base_settings
+
+    import json
+
+    overrides = json.loads(override_str)
+
+    merged = base_settings.copy()
+    merged.update(overrides)
+    return merged
+
+
 async def main():
-    requested = sys.argv[1:]
-    batches = section("imitation_batches")
-    if not batches:
-        print("no imitation_batches configured in config/defaults.yaml")
+    defaults_batches = section("imitation_batches") or {}
+    base_settings = section("imitation_collect") or {}
+
+    parser = build_arg_parser(defaults_batches)
+    args = parser.parse_args()
+
+    base_settings = apply_global_overrides(base_settings, args.override_settings)
+
+    if not defaults_batches:
+        print("no imitation_batches configured in defaults.yaml")
         return
-    base_settings = section("imitation_collect")
-    selection = {}
-    if requested:
-        for name in requested:
-            if name not in batches:
+
+    if args.batches:
+        selection = {}
+        for name in args.batches:
+            if name not in defaults_batches:
                 raise KeyError(f"unknown batch '{name}'")
-            selection[name] = batches[name]
+            selection[name] = defaults_batches[name]
     else:
-        selection = batches
+        selection = defaults_batches
+
     for name, batch_cfg in selection.items():
         print(f"[batch] starting {name}", flush=True)
         await _run_batch(name, batch_cfg, base_settings)

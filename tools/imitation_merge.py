@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import sys
 from pathlib import Path
 
@@ -43,16 +44,45 @@ def merge(sources, output_path):
     print(f"[merge] wrote {output_path} from {len(files)} files")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Merge imitation data files according to config")
+
+    parser.add_argument(
+        "--sources",
+        nargs="+",
+        default=None,
+        help="List of source file patterns to merge",
+    )
+
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Path to output merged file",
+    )
+
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
+    if args.sources and args.output:
+        merge(args.sources, args.output)
+        return
+
     merge_cfg = section("imitation_merge") or {}
     if not merge_cfg:
         raise RuntimeError("imitation_merge block not configured")
+
     sources = merge_cfg.get("sources")
     if not sources:
         raise RuntimeError("imitation_merge.sources is empty")
+
     output_path = merge_cfg.get("output_path")
     if not output_path:
         raise RuntimeError("imitation_merge.output_path missing")
+
     merge(sources, output_path)
 
 

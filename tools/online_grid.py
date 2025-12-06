@@ -58,12 +58,30 @@ def _prepare_overrides(mode_settings, overrides):
 
 def main():
     parser = argparse.ArgumentParser(description="Grid search for PPO online training")
-    parser.add_argument("--limit", type=int, default=None, help="maximum runs per mode")
+
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="maximum runs per mode",
+    )
+
+    parser.add_argument(
+        "modes",
+        nargs="*",
+        help="Overide sweep modes (default comes from config online_sweeps or online)",
+    )
+
     args = parser.parse_args()
 
     online_cfg = section("online") or {}
     sweep_cfg = section("online_sweeps") or {}
-    modes = sweep_cfg.pop("modes", list((online_cfg.get("modes") or {}).keys()) or ["scratch"])
+
+    modes = (
+        args.modes
+        if args.modes
+        else sweep_cfg.pop("modes", list((online_cfg.get("modes") or {}).keys()) or ["scratch"])
+    )
 
     if not sweep_cfg:
         print("[online-grid] no sweep parameters configured")

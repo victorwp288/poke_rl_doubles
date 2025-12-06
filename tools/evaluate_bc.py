@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import itertools
 import json
 import random
@@ -738,8 +739,76 @@ def _evaluate(model, eval_cfg, server_cfg, team_text):
     return rewards, outcomes, details
 
 
+def build_arg_parser(defaults):
+    parser = argparse.ArgumentParser(description="Evaluate BC policy vs bots")
+
+    parser.add_argument("--episodes", type=int, default=defaults.get("episodes"))
+    parser.add_argument("--opponent", type=str, default=defaults.get("opponent"))
+    parser.add_argument(
+        "--opponent-pool",
+        type=str,
+        default=",".join(defaults.get("opponent_pool", [])),
+        help="Comma-separated list",
+    )
+    parser.add_argument("--battle-format", type=str, default=defaults.get("battle_format"))
+    parser.add_argument("--tensorboard-dir", type=Path, default=defaults.get("tensorboard_dir"))
+    parser.add_argument("--output-path", type=Path, default=defaults.get("output_path"))
+    parser.add_argument("--checkpoint", type=Path, default=defaults.get("checkpoint"))
+    parser.add_argument("--stats-path", type=Path, default=defaults.get("stats_path"))
+    parser.add_argument("--our-team-path", type=Path, default=defaults.get("our_team_path"))
+    parser.add_argument("--server-url", type=str, default=defaults.get("server_url"))
+
+    return parser
+
+
+def merge_cli_overrides(defaults, args):
+    settings = defaults.copy()
+
+    for key in [
+        "episodes",
+        "opponent",
+        "battle_format",
+        "tensorboard_dir",
+        "output_path",
+        "checkpoint",
+        "stats_path",
+        "our_team_path",
+        "server_url",
+    ]:
+        value = getattr(args, key)
+        if value is not None:
+            settings[key] = value
+
+    if args.opponent_pool:
+        settings["opponent_pool"] = [x.strip() for x in args.opponent_pool.split(",") if x.strip()]
+
+    return settings
+
+
+def load_defaults():
+    cfg = section("evaluation") or {}
+    bc = cfg.get("bc_vs_bots", {}) or {}
+
+    return {
+        "episodes": bc.get("episodes", 10),
+        "opponent": bc.get("opponent", "simple"),
+        "opponent_pool": bc.get("opponent_pool", ["simple", "maxbp", "random"]),
+        "battle_format": bc.get("battle_format", "gen9doublesou"),
+        "tensorboard_dir": Path(bc.get("tensorboard_dir", "outputs/tensorboard/eval")),
+        "output_path": Path(bc.get("output_path", "outputs/eval/bc_vs_bots.jsonl")),
+        "checkpoint": Path(bc.get("checkpoint", "outputs/models/bc_policy.pt")),
+        "stats_path": Path(bc.get("stats_path", "outputs/models/bc_stats.json")),
+        "our_team_path": Path(bc.get("our_team_path", "teams/gen9dou_fixed.txt")),
+        "server_url": bc.get("server_url", "http://localhost:8000"),
+    }
+
+
 def main():
-    eval_cfg = section("evaluation").get("bc_vs_bots", {})
+    defaults = load_defaults()
+    parser = build_arg_parser(defaults)
+    args = parser.parse_args()
+    eval_cfg = merge_cli_overrides(defaults, args)
+
     if not eval_cfg:
         raise RuntimeError("evaluation.bc_vs_bots not configured")
     offline_cfg = section("offline")

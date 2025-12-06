@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+import argparse
 import contextlib
 import shutil
 import socket
 import sys
 import uuid
 from collections import deque
+from contextlib import suppress
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -508,9 +510,41 @@ def run(mode="scratch", overrides=None):
             _safe_close(eval_env)
 
 
+def parse_override_pairs(pairs):
+    overrides = {}
+    if not pairs:
+        return overrides
+    for pair in pairs:
+        if "=" not in pair:
+            raise ValueError(f"invalid override '{pair}'. Expected key=value format")
+        key, value = pair.split("=", 1)
+        with suppress(Exception):
+            value = eval(value)
+        overrides[key] = value
+    return overrides
+
+
 def main():
-    mode = sys.argv[1] if len(sys.argv) > 1 else "scratch"
-    run(mode)
+    parser = argparse.ArgumentParser(description="Run online PPO training.")
+
+    parser.add_argument(
+        "mode",
+        type=str,
+        default="scratch",
+        help="Which training mode from config.online.modes to run (default: scratch)",
+    )
+
+    parser.add_argument(
+        "--override",
+        type=str,
+        action="append",
+        help="Override configuration settings in key=value format. "
+        "For example: --override total_timesteps=5000000 --override learning_rate=0.0001",
+    )
+
+    args = parser.parse_args()
+    overrides = parse_override_pairs(args.override)
+    run(args.mode, overrides or None)
 
 
 if __name__ == "__main__":
