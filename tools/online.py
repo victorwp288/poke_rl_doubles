@@ -105,6 +105,36 @@ class CopyBestModelCallback(BaseCallback):
         return True
 
 
+class RewardMetricsCallback(BaseCallback):
+    def _get_stats(self):
+        env = self.training_env
+        if hasattr(env, "envs"):
+            env = env.evns[0]
+
+        base = getattr(env, "base_env", None)
+        if base is None:
+            return None
+
+        if hasattr(base, "last_battle_rewards"):
+            return base.last_global_stats()
+
+        return None
+
+    def _on_step(self):
+        stats = self._get_stats()
+        if not isinstance(stats, dict):
+            return True
+
+        for key, value in stats.items():
+            try:
+                v = float(value)
+            except Exception:
+                continue
+            self.logger.record(f"reward_components/{key}", v)
+
+        return True
+
+
 def _unique_username(prefix):
     token = (prefix or "bot")[:11]
     suffix = uuid.uuid4().hex[:6]
@@ -407,6 +437,7 @@ def run(mode="scratch", overrides=None):
     env = _build_env(settings, team_text=team_text, server_cfg=server_cfg)
     env.seed(seed)
     callbacks = []
+    callbacks.append(RewardMetricsCallback())
     checkpoint_freq = settings.get("checkpoint_freq", 0)
     if checkpoint_freq > 0:
         checkpoint_dir = settings["policy_path"].parent / "checkpoints"
