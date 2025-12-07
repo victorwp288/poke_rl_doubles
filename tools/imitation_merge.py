@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -42,6 +43,61 @@ def merge(sources, output_path):
                         break
                     dst.write(chunk)
     print(f"[merge] wrote {output_path} from {len(files)} files")
+
+    _summarise_dataset(output_path)
+
+
+def _summarise_dataset(dataset_path: Path):
+    total_samples = 0
+    total_entries = 0
+    total_zeros = 0
+    action_dim = None
+
+    dataset_path = Path(dataset_path)
+    stats_path = dataset_path.with_name("merge_stats.json")
+
+    with dataset_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            mask = obj.get("mask")
+            if mask is None:
+                continue
+
+            flat = [x for row in mask for x in row] if isinstance(mask[0], list) else mask
+
+            if action_dim is None:
+                action_dim = len(flat)
+
+            total_samples += 1
+            total_entries += len(flat)
+            total_zeros += sum(1 for x in flat if x == 0)
+
+    zero_mask_fraction = total_zeros / total_entries if total_entries > 0 else 0.0
+
+    summary = {
+        "dataset_path": str(dataset_path),
+        "total_samples": total_samples,
+        "action_dim": action_dim,
+        "zero_mask_fraction": zero_mask_fraction,
+    }
+
+    with stats_path.open("w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    print(
+        f"[merge stats] {dataset_path} | samples={total_samples} | "
+        f"action_dim={action_dim} | zero_mask_fraction={zero_mask_fraction:.4f}"
+    )
+
+    return summary
 
 
 def parse_args():
