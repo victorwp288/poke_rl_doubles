@@ -252,6 +252,18 @@ class MaskableDoublesEnv(SingleAgentWrapper):
         self._log_path = root / "outputs" / "logs" / "online_env.log"
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
 
+        import logging
+        from logging.handlers import RotatingFileHandler
+        self.logger = logging.getLogger("online_env")
+        if not any(isinstance(h,RotatingFileHandler) for h in self.logger.handlers):
+            self.logger.setLevel(logging.INFO)
+            h=RotatingFileHandler(self._log_path, maxBytes=20*1024*1024, backupCount=3)
+            import logging as _l
+            fmt=_l.Formatter("%(asctime)s - %(message)s")
+            h.setFormatter(fmt)
+            self.logger.addHandler(h)
+
+
     @property
     def base_env(self):
         return self.env

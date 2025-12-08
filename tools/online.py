@@ -32,6 +32,29 @@ from src.online.kl_ppo import KLRegularizedMaskablePPO  # noqa: E402
 from src.utils.teambuilders import read_showdown_team  # noqa: E402
 
 
+import json, csv, pathlib
+def _export_eval_metrics(best_dir, settings):
+    import numpy as _np
+    eval_file = pathlib.Path(best_dir)/"evaluations.npz"
+    if not eval_file.exists():
+        print("[eval export] evaluations.npz not found", flush=True)
+        return
+    data = _np.load(eval_file, allow_pickle=True)
+    out=pathlib.Path("outputs/eval"); out.mkdir(parents=True, exist_ok=True)
+    csv_path = out/"ppo_eval.csv"; jsonl = out/"ppo_eval.jsonl"
+    exists = csv_path.exists()
+    with open(csv_path,'a',newline='') as cf, open(jsonl,'a') as jf:
+        w=csv.writer(cf)
+        if not exists:
+            w.writerow(["settings_id","eval_index","timesteps","mean_reward","reward_std","mean_ep_length"])
+        sid=str(settings.get("policy_path","unknown"))
+        for i,ts in enumerate(data["timesteps"]):
+            r=data["results"][i]; l=data["ep_lengths"][i]
+            mr=float(r.mean()); sr=float(r.std()); ml=float(l.mean())
+            w.writerow([sid,i,int(ts),mr,sr,ml])
+            jf.write(json.dumps({"settings_id":sid,"eval_index":i,"timesteps":int(ts),
+                                 "mean_reward":mr,"reward_std":sr,"mean_ep_length":ml})+"\n")
+
 class RollingCheckpointCallback(BaseCallback):
     def __init__(
         self,
@@ -498,6 +521,9 @@ def run(mode="scratch", overrides=None):
             progress_bar=True,
         )
         model.save(str(settings["policy_path"]))
+        if best_dir is not None:
+            _export_eval_metrics(best_dir, settings)
+
         print(f"saved policy to {settings['policy_path']}")
         if best_dir is not None:
             best_candidate = best_dir / "best_model.zip"
@@ -549,3 +575,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
