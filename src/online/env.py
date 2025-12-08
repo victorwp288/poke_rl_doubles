@@ -1,3 +1,4 @@
+import contextlib
 import threading
 import time
 from pathlib import Path
@@ -251,6 +252,7 @@ class MaskableDoublesEnv(SingleAgentWrapper):
         root = Path(__file__).resolve().parents[2]
         self._log_path = root / "outputs" / "logs" / "online_env.log"
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._log_handle = None
 
     @property
     def base_env(self):
@@ -857,10 +859,28 @@ class MaskableDoublesEnv(SingleAgentWrapper):
             stats_text = ""
             if isinstance(stats, dict):
                 stats_text = f" | stats={stats}"
-            with self._log_path.open("a", encoding="utf-8") as handle:
-                handle.write(f"{time.time():.3f} {message}{stats_text}\n")
+            handle = self._ensure_log_handle()
+            handle.write(f"{time.time():.3f} {message}{stats_text}\n")
+            handle.flush()
         except Exception:
             pass
+
+    def _ensure_log_handle(self):
+        if self._log_handle is None:
+            self._log_handle = self._log_path.open("a", encoding="utf-8")
+        return self._log_handle
+
+    def _close_log_handle(self):
+        if self._log_handle is not None:
+            with contextlib.suppress(Exception):
+                self._log_handle.close()
+            self._log_handle = None
+
+    def close(self):
+        self._close_log_handle()
+        close_fn = getattr(super(), "close", None)
+        if callable(close_fn):
+            close_fn()
 
     def _force_progress(self):
         with self._timeout_lock:

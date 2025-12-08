@@ -1,13 +1,12 @@
 import json
-import math
 import random
 from pathlib import Path
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
-from .dataset import load_samples, split_train_val
+from .dataset import IndexedJsonlDataset, scan_samples, split_train_val
 from .model import BehaviorCloningPolicy
 
 
@@ -68,17 +67,6 @@ class OfflineConfig:
         return dict(self.raw)
 
 
-class _SampleDataset(Dataset):
-    def __init__(self, samples):
-        self.samples = samples
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, index):
-        return self.samples[index]
-
-
 def _batch_collate(batch):
     observations = torch.tensor([sample[0] for sample in batch], dtype=torch.float32)
     actions = torch.tensor([sample[1] for sample in batch], dtype=torch.long)
@@ -86,46 +74,13 @@ def _batch_collate(batch):
     return observations, actions, mask
 
 
-def _feature_stats(samples):
-    obs_length = len(samples[0][0])
-    sums = [0.0] * obs_length
-    sq_sums = [0.0] * obs_length
-    for observation, _, _ in samples:
-        for idx, value in enumerate(observation):
-            sums[idx] += value
-            sq_sums[idx] += value * value
-    count = float(len(samples))
-    means = [total / count for total in sums]
-    stds = []
-    for idx, sq_total in enumerate(sq_sums):
-        mean = means[idx]
-        variance = max((sq_total / count) - mean * mean, 0.0)
-        stds.append(math.sqrt(variance))
-    return means, stds
-
-
-def _binary_feature_flags(samples):
-    if not samples:
-        return []
-    obs_length = len(samples[0][0])
-    flags = [True] * obs_length
-    for observation, _, _ in samples:
-        for idx, value in enumerate(observation):
-            if flags[idx] and value not in (0.0, 1.0):
-                flags[idx] = False
-        if not any(flags):
-            break
-    return flags
-
-
-def _normalize_samples(samples, mean, std):
-    if not samples:
-        return
-    scales = [value if value > 1e-6 else 1.0 for value in std]
-    for observation, _, _ in samples:
-        for idx, value in enumerate(observation):
-            centered = value - mean[idx]
-            observation[idx] = centered / scales[idx]
+def _binary_feature_mask(binary_flags, device):
+    if not binary_flags:
+        return None
+    numeric_flags = [not flag for flag in binary_flags]
+    if not any(numeric_flags):
+        return None
+    return torch.tensor(numeric_flags, dtype=torch.float32, device=device)
 
 
 def _pick_device(preference):
@@ -219,12 +174,12 @@ def _tensorboard_writer(path):
     return SummaryWriter(log_dir=str(path))
 
 
-def _data_loader(samples, batch_size, device, shuffle):
-    if not samples:
+def _data_loader(dataset, batch_size, device, shuffle):
+    if dataset is None or len(dataset) == 0:
         return None
     pin_memory = getattr(device, "type", "cpu") == "cuda"
     return DataLoader(
-        _SampleDataset(samples),
+        dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         collate_fn=_batch_collate,
@@ -243,36 +198,32 @@ def train_offline(settings):
     torch.manual_seed(config.seed)
     random.seed(config.seed)
 
-    samples = load_samples(
+    scan = scan_samples(
         config.dataset_path,
         max_samples=config.max_samples,
         seed=config.seed,
         shuffle=config.shuffle,
     )
-    train_samples, val_samples = split_train_val(samples, config.val_fraction)
-    if not train_samples:
+    train_offsets, val_offsets = split_train_val(scan.offsets, config.val_fraction)
+    if not train_offsets:
         raise ValueError("training split must contain samples")
 
-    mean, std = _feature_stats(train_samples)
-    binary_flags = _binary_feature_flags(train_samples)
-    _normalize_samples(train_samples, mean, std)
-    _normalize_samples(val_samples, mean, std)
-    numeric_feature_mask = None
-    if binary_flags:
-        numeric_flags = [not flag for flag in binary_flags]
-        numeric_feature_mask = torch.tensor(
-            numeric_flags,
-            dtype=torch.float32,
-            device=device,
-        )
+    train_dataset = IndexedJsonlDataset(scan.path, train_offsets, scan.mean, scan.std)
+    val_dataset = (
+        IndexedJsonlDataset(scan.path, val_offsets, scan.mean, scan.std) if val_offsets else None
+    )
 
-    train_loader = _data_loader(train_samples, config.batch_size, device, True)
-    val_loader = _data_loader(val_samples, config.batch_size, device, False)
+    sample_obs, _, sample_mask = train_dataset[0]
+    obs_dim = scan.obs_dim or len(sample_obs)
+    act_dim = scan.action_dim or (len(sample_mask[0]) if sample_mask else 0)
+
+    numeric_feature_mask = _binary_feature_mask(scan.binary_flags, device)
+
+    train_loader = _data_loader(train_dataset, config.batch_size, device, True)
+    val_loader = _data_loader(val_dataset, config.batch_size, device, False)
 
     writer = _tensorboard_writer(config.tensorboard_dir)
 
-    obs_dim = len(train_samples[0][0])
-    act_dim = len(train_samples[0][2][0])
     model = BehaviorCloningPolicy(
         obs_dim,
         act_dim,
@@ -289,7 +240,7 @@ def train_offline(settings):
 
     metrics = []
     best_loss = None
-    normalization = {"mean": mean, "std": std, "count": len(train_samples)}
+    normalization = {"mean": scan.mean, "std": scan.std, "count": scan.count}
 
     config.policy_path.parent.mkdir(parents=True, exist_ok=True)
     if config.stats_path:
@@ -297,67 +248,72 @@ def train_offline(settings):
 
     print(
         "offline setup: "
-        f"total={len(samples)} train={len(train_samples)} val={len(val_samples)} "
+        f"total={len(scan.offsets)} train={len(train_offsets)} val={len(val_offsets)} "
         f"batch={config.batch_size} epochs={config.epochs} device={device}",
         flush=True,
     )
 
-    for epoch in range(1, config.epochs + 1):
-        train_loss = _train_epoch(
-            model,
-            train_loader,
-            device,
-            loss_fn,
-            optimizer,
-            config.log_every,
-            config.grad_clip_norm,
-            config.obs_noise_std,
-            numeric_feature_mask,
-        )
-        val_loss = _evaluate(model, val_loader, device, loss_fn)
-        metrics.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
-        if val_loss is None:
-            print(f"epoch {epoch}: train {train_loss:.4f}")
-        else:
-            print(f"epoch {epoch}: train {train_loss:.4f} val {val_loss:.4f}")
+    try:
+        for epoch in range(1, config.epochs + 1):
+            train_loss = _train_epoch(
+                model,
+                train_loader,
+                device,
+                loss_fn,
+                optimizer,
+                config.log_every,
+                config.grad_clip_norm,
+                config.obs_noise_std,
+                numeric_feature_mask,
+            )
+            val_loss = _evaluate(model, val_loader, device, loss_fn)
+            metrics.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+            if val_loss is None:
+                print(f"epoch {epoch}: train {train_loss:.4f}")
+            else:
+                print(f"epoch {epoch}: train {train_loss:.4f} val {val_loss:.4f}")
+
+            if writer is not None:
+                writer.add_scalar("loss/train", train_loss, epoch)
+                if val_loss is not None:
+                    writer.add_scalar("loss/val", val_loss, epoch)
+                writer.flush()
+
+            if val_loss is not None and (best_loss is None or val_loss < best_loss):
+                best_loss = val_loss
+                payload = {
+                    "state_dict": model.state_dict(),
+                    "config": config.as_dict(),
+                    "obs_dim": obs_dim,
+                    "action_dim": act_dim,
+                    "normalization": normalization,
+                }
+                config.best_policy_path.parent.mkdir(parents=True, exist_ok=True)
+                torch.save(payload, config.best_policy_path)
+                print(f"saved best policy to {config.best_policy_path} (val_loss={val_loss:.4f})")
+                if config.best_stats_path is not None:
+                    _write_stats(config.best_stats_path, normalization)
+                    print(f"saved best normalization stats to {config.best_stats_path}")
+
+        payload = {
+            "state_dict": model.state_dict(),
+            "config": config.as_dict(),
+            "obs_dim": obs_dim,
+            "action_dim": act_dim,
+            "normalization": normalization,
+        }
+        torch.save(payload, config.policy_path)
+        print(f"saved policy to {config.policy_path}")
+
+        if config.stats_path:
+            _write_stats(config.stats_path, normalization)
+            print(f"saved normalization stats to {config.stats_path}")
 
         if writer is not None:
-            writer.add_scalar("loss/train", train_loss, epoch)
-            if val_loss is not None:
-                writer.add_scalar("loss/val", val_loss, epoch)
-            writer.flush()
+            writer.close()
 
-        if val_loss is not None and (best_loss is None or val_loss < best_loss):
-            best_loss = val_loss
-            payload = {
-                "state_dict": model.state_dict(),
-                "config": config.as_dict(),
-                "obs_dim": obs_dim,
-                "action_dim": act_dim,
-                "normalization": normalization,
-            }
-            config.best_policy_path.parent.mkdir(parents=True, exist_ok=True)
-            torch.save(payload, config.best_policy_path)
-            print(f"saved best policy to {config.best_policy_path} (val_loss={val_loss:.4f})")
-            if config.best_stats_path is not None:
-                _write_stats(config.best_stats_path, normalization)
-                print(f"saved best normalization stats to {config.best_stats_path}")
-
-    payload = {
-        "state_dict": model.state_dict(),
-        "config": config.as_dict(),
-        "obs_dim": obs_dim,
-        "action_dim": act_dim,
-        "normalization": normalization,
-    }
-    torch.save(payload, config.policy_path)
-    print(f"saved policy to {config.policy_path}")
-
-    if config.stats_path:
-        _write_stats(config.stats_path, normalization)
-        print(f"saved normalization stats to {config.stats_path}")
-
-    if writer is not None:
-        writer.close()
-
-    return metrics
+        return metrics
+    finally:
+        train_dataset.close()
+        if val_dataset is not None:
+            val_dataset.close()

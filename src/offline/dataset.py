@@ -1,41 +1,38 @@
+import contextlib
 import json
 import random
+import threading
+from dataclasses import dataclass
 from pathlib import Path
-import torch
-from torch.utils.data import Dataset
-from typing import List, Tuple, Optional, Union, Any
+from typing import Any, List, Optional, Tuple, Union
+
 import numpy as np
 import numpy.typing as npt
+import torch
+from torch.utils.data import Dataset, get_worker_info
+
 
 def _as_float_list(raw):
     if not isinstance(raw, list):
         raise ValueError
-    values = []
-    for value in raw:
-        values.append(float(value))
-    return values
+    return [float(value) for value in raw]
 
 
 def _as_int_list(raw):
     if not isinstance(raw, list):
         raise ValueError
-    values = []
-    for value in raw:
-        values.append(int(value))
-    return values
+    return [int(value) for value in raw]
 
 
 def _as_mask(raw):
     if not isinstance(raw, list):
         raise ValueError
-    parsed = []
-    width = None
+    parsed: list[list[int]] = []
+    width: Optional[int] = None
     for slot in raw:
         if not isinstance(slot, list):
             raise ValueError
-        slot_mask = []
-        for entry in slot:
-            slot_mask.append(1 if int(entry) else 0)
+        slot_mask = [1 if int(entry) else 0 for entry in slot]
         if width is None:
             width = len(slot_mask)
         elif len(slot_mask) != width:
@@ -71,6 +68,7 @@ def _parse_payload(payload):
 
 
 def load_samples(dataset_path, max_samples=None, seed=0, shuffle=True):
+    """Legacy helper retained for compatibility with older tooling."""
     path = Path(dataset_path)
     if not path.exists():
         raise FileNotFoundError(f"missing dataset: {path}")
@@ -86,12 +84,12 @@ def load_samples(dataset_path, max_samples=None, seed=0, shuffle=True):
             except Exception:
                 continue
             samples.append(sample)
+            if max_samples and len(samples) >= max_samples:
+                break
     if not samples:
         raise ValueError(f"no usable records in {path}")
     if shuffle:
         random.Random(seed).shuffle(samples)
-    if max_samples and max_samples > 0:
-        samples = samples[:max_samples]
     return samples
 
 
@@ -107,164 +105,176 @@ def split_train_val(samples, val_fraction):
     train_split = items[val_count:]
     return train_split, val_split
 
+
+@dataclass
 class ScanResult:
-    def __init__(
-        self,
-        path: Path,
-        offsets: List[int],
-        mean: npt.NDArray[np.float32],
-        std: npt.NDArray[np.float32],
-        count: int,
-        obs_dim: int,
-        binary_flags: List[bool]
-    ):
-        self.path = path
-        self.offsets = offsets
-        self.mean = mean
-        self.std = std
-        self.count = count
-        self.obs_dim = obs_dim
-        self.binary_flags = binary_flags
+    path: Path
+    offsets: list[int]
+    mean: npt.NDArray[np.float32]
+    std: npt.NDArray[np.float32]
+    binary_flags: list[bool]
+    count: int
+    obs_dim: int
+    action_dim: int
+
 
 def scan_samples(
     dataset_path: Union[str, Path],
     max_samples: Optional[int] = None,
     seed: int = 0,
-    shuffle: bool = True
+    shuffle: bool = True,
 ) -> ScanResult:
-    """
-    Scan a JSONL dataset to collect statistics and byte offsets without loading all data into memory.
-    """
+    """Scan a JSONL dataset in a streaming fashion to compute stats and byte offsets.
 
+    This implementation keeps only running statistics in memory instead of all
+    observations, while remaining API-compatible with the original helper.
+    """
     path = Path(dataset_path)
-
     if not path.exists():
-        raise FileNotFoundError(f"Missing dataset: {path}")
-    
-    offsets = []
-    observations = []
-    obs_dim = None
+        raise FileNotFoundError(f"missing dataset: {path}")
 
-    # First pass: collect offsets and observations
-    with path.open("rb") as handle:
-        offset = 0
+    offsets: list[int] = []
+    count = 0
+    mean: Optional[np.ndarray] = None
+    m2: Optional[np.ndarray] = None
+    binary_flags: Optional[np.ndarray] = None
+    obs_dim: Optional[int] = None
+    action_dim: Optional[int] = None
 
-        for raw_line_bytes in handle:
-            line_start = offset
-            offset += len(raw_line_bytes)
-            line = raw_line_bytes.decode("utf-8").strip()
-
+    with path.open("r", encoding="utf-8") as handle:
+        while True:
+            position = handle.tell()
+            raw_line = handle.readline()
+            if not raw_line:
+                break
+            line = raw_line.strip()
             if not line:
                 continue
-
             try:
                 payload = json.loads(line)
-                obs, actions, mask = _parse_payload(payload)
-
-                if obs_dim is None:
-                    obs_dim = len(obs)
-                elif len(obs) != obs_dim:
-                    continue
-
-                offsets.append(line_start)
-                observations.append(obs)
-
-                if max_samples and len(observations) >= max_samples:
-                    break
+                observation, actions, mask = _parse_payload(payload)
             except Exception:
                 continue
-    
-    if not observations:
-        raise ValueError(f"No usable records in {path}")
-    
-    count = len(observations)
-    obs_array = torch.tensor(observations, dtype=torch.float32)
-    mean = obs_array.mean(dim=0)
-    std = obs_array.std(dim=0, unbiased=False)
-    binary_flags = []
 
-    assert obs_dim is not None
+            obs_array = np.asarray(observation, dtype=np.float64)
+            if obs_dim is None:
+                obs_dim = int(obs_array.size)
+                mean = np.zeros(obs_dim, dtype=np.float64)
+                m2 = np.zeros(obs_dim, dtype=np.float64)
+                binary_flags = np.ones(obs_dim, dtype=bool)
+            if obs_array.size != obs_dim:
+                continue
 
-    for col_idx in range(obs_dim):
-        column = obs_array[:, col_idx]
-        unique_vals = torch.unique(column)
-        is_binary = all(val in [0.0, 1.0] for val in unique_vals.tolist())
+            count += 1
+            # Welford's online algorithm for mean / variance
+            assert mean is not None and m2 is not None
+            delta = obs_array - mean
+            mean += delta / count
+            delta2 = obs_array - mean
+            m2 += delta * delta2
 
-        binary_flags.append(is_binary)
+            if binary_flags is not None:
+                binary_flags &= np.isin(obs_array, (0.0, 1.0))
+
+            offsets.append(position)
+            if action_dim is None and mask:
+                action_dim = len(mask[0])
+            if max_samples and len(offsets) >= max_samples:
+                break
+
+    if not offsets or count == 0:
+        raise ValueError(f"no usable records in {path}")
 
     if shuffle:
-        indices = list(range(len(offsets)))
-        random.Random(seed).shuffle(indices)
-        offsets = [offsets[i] for i in indices]
+        random.Random(seed).shuffle(offsets)
+
+    assert mean is not None and m2 is not None and obs_dim is not None
+    variance = m2 / count if count > 0 else np.zeros_like(m2)
+    std = np.sqrt(np.maximum(variance, 0.0))
+
+    mean32 = mean.astype(np.float32)
+    std32 = std.astype(np.float32)
+    binary_list = binary_flags.tolist() if binary_flags is not None else []
 
     return ScanResult(
         path=path,
         offsets=offsets,
-        mean=mean.numpy(),
-        std=std.numpy(),
+        mean=mean32,
+        std=std32,
+        binary_flags=list(binary_list),
         count=count,
-        obs_dim=obs_dim,
-        binary_flags=binary_flags
+        obs_dim=obs_dim or 0,
+        action_dim=action_dim or 0,
     )
 
+
 class IndexedJsonlDataset(Dataset):
-    """
-    Memory efficient dataset that reads JSONL files on-demand using byte offsets.
-    """
+    """Memory-efficient dataset that reads JSONL records on-demand using byte offsets."""
 
-    def __init__(
-        self,
-        path: Union[str, Path],
-        offsets: List[int],
-        mean: Union[npt.NDArray[np.float32], torch.Tensor],
-        std: Union[npt.NDArray[np.float32], torch.Tensor],
-        binary_flags: Optional[List[bool]] = None
-    ):
-        self.path = Path(path)
-        self.offsets = offsets
-        self.mean = torch.tensor(mean, dtype=torch.float32) if not isinstance(mean, torch.Tensor) else mean
-        self.std = torch.tensor(std, dtype=torch.float32) if not isinstance(std, torch.Tensor) else std
-        self.binary_flags = binary_flags
-        self._file_handle = None
+    def __init__(self, dataset_path: Union[str, Path], offsets, mean, std):
+        self.path = Path(dataset_path)
+        self.offsets = list(offsets)
 
-    def _ensure_file_open(self):
-        if self._file_handle is None:
-            self._file_handle = self.path.open("rb")
+        mean_arr = np.asarray(mean, dtype=np.float32)
+        std_arr = np.asarray(std, dtype=np.float32)
+        std_arr[std_arr <= 1e-6] = 1.0
+
+        self._mean = mean_arr
+        self._scales = std_arr
+        self._handle: Optional[Any] = None
+        self._lock = threading.Lock()
+        self._worker_handles: dict[int, Any] = {}
 
     def __len__(self) -> int:
         return len(self.offsets)
-    
-    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        self._ensure_file_open()
 
-        # Seek byte offset
-        assert self._file_handle is not None
-        self._file_handle.seek(self.offsets[idx])
+    def close(self) -> None:
+        if self._handle is not None:
+            with contextlib.suppress(Exception):
+                self._handle.close()
+            self._handle = None
+        for handle in self._worker_handles.values():
+            with contextlib.suppress(Exception):
+                handle.close()
+        self._worker_handles.clear()
 
-        line_bytes: bytes = self._file_handle.readline()
-        line = line_bytes.decode("utf-8").strip()
+    def _ensure_handle(self):
+        if self._handle is None:
+            self._handle = self.path.open("r", encoding="utf-8")
+        return self._handle
 
+    def _read_line(self, offset: int) -> str:
+        worker = get_worker_info()
+        if worker is not None:
+            handle = self._worker_handles.get(worker.id)
+            if handle is None:
+                handle = self.path.open("r", encoding="utf-8")
+                self._worker_handles[worker.id] = handle
+            handle.seek(offset)
+            return handle.readline()
+
+        with self._lock:
+            handle = self._ensure_handle()
+            handle.seek(offset)
+            return handle.readline()
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        offset = self.offsets[index]
+        line = self._read_line(offset)
         if not line:
-            raise ValueError(f"Empty line at offset {self.offsets[idx]}")
+            raise ValueError(f"empty line at offset {offset}")
 
-        # Parse JSON
         payload = json.loads(line)
-        obs, actions, mask = _parse_payload(payload)
+        observation, actions, mask = _parse_payload(payload)
 
-        # Convert to tensors
-        obs_tensor = torch.tensor(obs, dtype=torch.float32)
+        obs_array = np.asarray(observation, dtype=np.float32)
+        obs_array = (obs_array - self._mean) / self._scales
+        obs_tensor = torch.from_numpy(obs_array)
         actions_tensor = torch.tensor(actions, dtype=torch.long)
         mask_tensor = torch.tensor(mask, dtype=torch.bool)
+        return obs_tensor, actions_tensor, mask_tensor
 
-        # Normalize observations
-        std_safe = torch.where(self.std > 1e-6, self.std, torch.ones_like(self.std))
-        obs_normalized = (obs_tensor - self.mean) / std_safe
+    def __del__(self) -> None:
+        self.close()
 
-        return obs_normalized, actions_tensor, mask_tensor
-    
-    def __del__(self):
-        if self._file_handle is not None:
-            try:
-                self._file_handle.close()
-            except Exception:
-                pass
+

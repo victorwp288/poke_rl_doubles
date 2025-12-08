@@ -6,9 +6,11 @@ import contextlib
 import json
 import random
 import sys
+import uuid
 from pathlib import Path
 
 from poke_env import (
+    AccountConfiguration,
     LocalhostServerConfiguration,
     ServerConfiguration,
     ShowdownServerConfiguration,
@@ -52,6 +54,40 @@ def _resolve_server_configuration(url):
 
     auth_url = ShowdownServerConfiguration.authentication_url
     return ServerConfiguration(websocket_url, auth_url)
+
+
+def _probe_action_space_size(battle_format, server_cfg):
+    env = None
+    try:
+        account = AccountConfiguration(f"Recorder{uuid.uuid4().hex[:6]}", None)
+        env = DoublesEnv(
+            account_configuration1=account,
+            battle_format=battle_format,
+            server_configuration=server_cfg,
+            start_listening=False,
+            fake=True,
+        )
+        agents = getattr(env, "possible_agents", None) or []
+        agent = agents[0] if agents else getattr(env, "agent", None)
+        if agent is None:
+            return None
+        space = env.action_space(agent)
+        nvec = getattr(space, "nvec", None)
+        if nvec is None or len(nvec) == 0:
+            return None
+        return int(nvec[0])
+    except Exception as exc:
+        print(f"[warn] failed to probe action space size via DoublesEnv: {exc}")
+        return None
+    finally:
+        if env is not None:
+            with contextlib.suppress(Exception):
+                env.close()
+
+
+def _resolve_action_space_size(settings, server_cfg):
+    inferred = _probe_action_space_size(settings.battle_format, server_cfg)
+    return inferred or action_space_size(settings.battle_format)
 
 
 def _action_to_tuple(order, battle):
@@ -198,8 +234,8 @@ def _build_opponent(*, kind, settings, opponent_pool, server_cfg):
 
 async def play_dataset(settings):
     random.seed(settings.seed)
-    act_size = action_space_size(settings.battle_format)
     server_cfg = _resolve_server_configuration(settings.server_url)
+    act_size = _resolve_action_space_size(settings, server_cfg)
 
     our_team_text = read_showdown_team(settings.our_team_path)
     opponent_pool = _opponent_pool(settings, our_team_text)
@@ -262,6 +298,7 @@ async def play_dataset(settings):
             f"[info] teacher results -> wins={stats['wins']} losses={stats['losses']} draws={stats['draws']}",
             flush=True,
         )
+        _cleanup(teacher)
 
     print(
         f"Collected {settings.n_battles} battles at {settings.out_path}. "

@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import numpy as np
 from poke_env.battle.effect import Effect
 from poke_env.battle.field import Field
@@ -348,17 +350,29 @@ class ObservationEncoder:
 
     def _terrain_vector(self, fields):
         vector = [0.0] * len(self.config.terrain_order)
-        has_active = any(field is not None and field.is_terrain for field in fields)
+        terrain_keys = self._fields_as_keys(fields)
+        terrain_set = {terrain for terrain in self.config.terrain_order if terrain is not None}
+        has_active = any(key in terrain_set for key in terrain_keys)
         for idx, terrain in enumerate(self.config.terrain_order):
             if terrain is None:
                 if not has_active:
                     vector[idx] = 1.0
                 continue
-            if terrain in fields:
+            if terrain in terrain_keys:
                 vector[idx] = 1.0
         if not any(vector):
             vector[0] = 1.0
         return vector
+
+    def _fields_as_keys(self, fields):
+        if isinstance(fields, dict):
+            return tuple(fields.keys())
+        if fields is None:
+            return ()
+        try:
+            return tuple(fields)
+        except TypeError:
+            return ()
 
     def _weather_turns_left(self, weather, turn):
         if not weather:
@@ -369,10 +383,11 @@ class ObservationEncoder:
         return self._normalize_timer(remaining, self.config.screen_turns)
 
     def _terrain_turns_left(self, fields, turn):
+        field_map = fields if isinstance(fields, dict) else {}
         for terrain in self.config.terrain_order:
             if terrain is None:
                 continue
-            start = fields.get(terrain)
+            start = field_map.get(terrain)
             if start is not None:
                 remaining = max(0, self.config.screen_turns - (turn - start))
                 return self._normalize_timer(remaining, self.config.screen_turns)
@@ -606,6 +621,27 @@ def _legal_orders(battle, slot):
 
 
 def slot_action_mask(battle, slot, act_size):
+    cache = getattr(battle, "_slot_action_cache", None)
+    token = _mask_state_key(battle)
+    if (
+        cache
+        and cache.get("token") == token
+        and cache.get("act_size") == act_size
+        and cache.get("masks")
+    ):
+        cached_masks = cache["masks"]
+        if slot < len(cached_masks) and cached_masks[slot] is not None:
+            return list(cached_masks[slot])
+
+    masks = [
+        _build_slot_action_mask(battle, 0, act_size),
+        _build_slot_action_mask(battle, 1, act_size),
+    ]
+    battle._slot_action_cache = {"token": token, "act_size": act_size, "masks": masks}
+    return masks[slot]
+
+
+def _build_slot_action_mask(battle, slot, act_size):
     legal_actions = set()
     if slot < 0 or slot >= 2:
         return [1] * act_size
@@ -719,6 +755,58 @@ def combine_slot_masks(mask_a, mask_b):
 
 def observation_size():
     return OBSERVATION_SIZE
+
+
+def _mask_state_key(battle):
+    def _bool_tuple(values):
+        return tuple(bool(entry) for entry in (values or [])[:2])
+
+    def _moves_signature(all_moves):
+        signature = []
+        iterable = list(all_moves)[:2] if isinstance(all_moves, Sequence) else []
+        for slot_moves in iterable:
+            slot_sig = []
+            for move in slot_moves or []:
+                slot_sig.append(
+                    (
+                        getattr(move, "id", None),
+                        bool(getattr(move, "disabled", False)),
+                        int(getattr(move, "current_pp", 0) or 0),
+                    )
+                )
+            signature.append(tuple(slot_sig))
+        while len(signature) < 2:
+            signature.append(())
+        return tuple(signature)
+
+    def _switch_signature(all_switches):
+        signature = []
+        iterable = list(all_switches)[:2] if isinstance(all_switches, Sequence) else []
+        for slot_switches in iterable:
+            slot_sig = []
+            for mon in slot_switches or []:
+                slot_sig.append(
+                    (
+                        getattr(mon, "species", getattr(mon, "base_species", None)),
+                        bool(getattr(mon, "fainted", False)),
+                    )
+                )
+            signature.append(tuple(slot_sig))
+        while len(signature) < 2:
+            signature.append(())
+        return tuple(signature)
+
+    return (
+        getattr(battle, "turn", 0),
+        _bool_tuple(getattr(battle, "force_switch", [])),
+        _bool_tuple(getattr(battle, "trapped", [])),
+        _bool_tuple(getattr(battle, "can_mega_evolve", [])),
+        _bool_tuple(getattr(battle, "can_z_move", [])),
+        _bool_tuple(getattr(battle, "can_dynamax", [])),
+        _bool_tuple(getattr(battle, "can_tera", [])),
+        _moves_signature(getattr(battle, "available_moves", [])),
+        _switch_signature(getattr(battle, "available_switches", [])),
+    )
 
 
 __all__ = [
