@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import argparse
 import contextlib
+import csv
+import json
+import pathlib
 import shutil
 import socket
 import sys
@@ -32,28 +35,54 @@ from src.online.kl_ppo import KLRegularizedMaskablePPO  # noqa: E402
 from src.utils.teambuilders import read_showdown_team  # noqa: E402
 
 
-import json, csv, pathlib
 def _export_eval_metrics(best_dir, settings):
     import numpy as _np
-    eval_file = pathlib.Path(best_dir)/"evaluations.npz"
+
+    eval_file = pathlib.Path(best_dir) / "evaluations.npz"
     if not eval_file.exists():
         print("[eval export] evaluations.npz not found", flush=True)
         return
     data = _np.load(eval_file, allow_pickle=True)
-    out=pathlib.Path("outputs/eval"); out.mkdir(parents=True, exist_ok=True)
-    csv_path = out/"ppo_eval.csv"; jsonl = out/"ppo_eval.jsonl"
+    out = pathlib.Path("outputs/eval")
+    out.mkdir(parents=True, exist_ok=True)
+    csv_path = out / "ppo_eval.csv"
+    jsonl = out / "ppo_eval.jsonl"
     exists = csv_path.exists()
-    with open(csv_path,'a',newline='') as cf, open(jsonl,'a') as jf:
-        w=csv.writer(cf)
+    with open(csv_path, "a", newline="") as cf, open(jsonl, "a") as jf:
+        w = csv.writer(cf)
         if not exists:
-            w.writerow(["settings_id","eval_index","timesteps","mean_reward","reward_std","mean_ep_length"])
-        sid=str(settings.get("policy_path","unknown"))
-        for i,ts in enumerate(data["timesteps"]):
-            r=data["results"][i]; l=data["ep_lengths"][i]
-            mr=float(r.mean()); sr=float(r.std()); ml=float(l.mean())
-            w.writerow([sid,i,int(ts),mr,sr,ml])
-            jf.write(json.dumps({"settings_id":sid,"eval_index":i,"timesteps":int(ts),
-                                 "mean_reward":mr,"reward_std":sr,"mean_ep_length":ml})+"\n")
+            w.writerow(
+                [
+                    "settings_id",
+                    "eval_index",
+                    "timesteps",
+                    "mean_reward",
+                    "reward_std",
+                    "mean_ep_length",
+                ]
+            )
+        sid = str(settings.get("policy_path", "unknown"))
+        for i, ts in enumerate(data["timesteps"]):
+            rewards = data["results"][i]
+            ep_lengths = data["ep_lengths"][i]
+            mr = float(rewards.mean())
+            sr = float(rewards.std())
+            ml = float(ep_lengths.mean())
+            w.writerow([sid, i, int(ts), mr, sr, ml])
+            jf.write(
+                json.dumps(
+                    {
+                        "settings_id": sid,
+                        "eval_index": i,
+                        "timesteps": int(ts),
+                        "mean_reward": mr,
+                        "reward_std": sr,
+                        "mean_ep_length": ml,
+                    }
+                )
+                + "\n"
+            )
+
 
 class RollingCheckpointCallback(BaseCallback):
     def __init__(
@@ -125,6 +154,36 @@ class CopyBestModelCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         self._copy_if_updated()
+        return True
+
+
+class RewardMetricsCallback(BaseCallback):
+    def _get_stats(self):
+        env = self.training_env
+        if hasattr(env, "envs"):
+            env = env.evns[0]
+
+        base = getattr(env, "base_env", None)
+        if base is None:
+            return None
+
+        if hasattr(base, "last_battle_rewards"):
+            return base.last_global_stats()
+
+        return None
+
+    def _on_step(self):
+        stats = self._get_stats()
+        if not isinstance(stats, dict):
+            return True
+
+        for key, value in stats.items():
+            try:
+                v = float(value)
+            except Exception:
+                continue
+            self.logger.record(f"reward_components/{key}", v)
+
         return True
 
 
@@ -430,6 +489,7 @@ def run(mode="scratch", overrides=None):
     env = _build_env(settings, team_text=team_text, server_cfg=server_cfg)
     env.seed(seed)
     callbacks = []
+    callbacks.append(RewardMetricsCallback())
     checkpoint_freq = settings.get("checkpoint_freq", 0)
     if checkpoint_freq > 0:
         checkpoint_dir = settings["policy_path"].parent / "checkpoints"
@@ -575,4 +635,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

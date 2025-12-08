@@ -212,6 +212,11 @@ class Gen9DoublesEnv(DoublesEnv):
     def latest_stats(self, battle):
         return self._last_stats.get(_battle_key(battle))
 
+    def latest_global_stats(self):
+        if not self._last_stats:
+            return None
+        return next(reversed(self._last_stats.values()))
+
     def set_rewards(self, **updates):
         changed = {}
         for key, value in updates.items():
@@ -256,15 +261,16 @@ class MaskableDoublesEnv(SingleAgentWrapper):
 
         import logging
         from logging.handlers import RotatingFileHandler
+
         self.logger = logging.getLogger("online_env")
-        if not any(isinstance(h,RotatingFileHandler) for h in self.logger.handlers):
+        if not any(isinstance(h, RotatingFileHandler) for h in self.logger.handlers):
             self.logger.setLevel(logging.INFO)
-            h=RotatingFileHandler(self._log_path, maxBytes=20*1024*1024, backupCount=3)
+            h = RotatingFileHandler(self._log_path, maxBytes=20 * 1024 * 1024, backupCount=3)
             import logging as _l
-            fmt=_l.Formatter("%(asctime)s - %(message)s")
+
+            fmt = _l.Formatter("%(asctime)s - %(message)s")
             h.setFormatter(fmt)
             self.logger.addHandler(h)
-
 
     @property
     def base_env(self):

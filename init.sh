@@ -59,4 +59,3 @@ for package in "${db_packages[@]}"; do
 done
 
 echo "Environment setup complete."
-
