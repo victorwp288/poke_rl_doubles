@@ -3,6 +3,7 @@
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -213,6 +214,39 @@ def test_slot_action_mask_forced_switch_indices():
     assert mask[5] == 1
     assert mask[9] == 1
     assert sum(mask) == 2
+
+
+def test_slot_action_mask_returns_copy_on_cache_miss():
+    battle = SimpleNamespace()
+
+    with (
+        patch("src.core.features._mask_state_key", return_value="token"),
+        patch("src.core.features._build_slot_action_mask", side_effect=[[1, 0], [0, 1]]),
+    ):
+        mask = slot_action_mask(battle, 0, 2)
+
+    cached = battle._slot_action_cache["masks"][0]
+    assert mask == [1, 0]
+    assert mask is not cached
+
+    mask[0] = 0
+    assert cached[0] == 1
+
+
+def test_slot_action_mask_returns_copy_on_cache_hit():
+    battle = SimpleNamespace(
+        _slot_action_cache={"token": "token", "act_size": 2, "masks": [[1, 0], [0, 1]]}
+    )
+
+    with patch("src.core.features._mask_state_key", return_value="token"):
+        mask = slot_action_mask(battle, 0, 2)
+
+    cached = battle._slot_action_cache["masks"][0]
+    assert mask == [1, 0]
+    assert mask is not cached
+
+    mask[0] = 0
+    assert cached[0] == 1
 
 
 def test_slot_action_mask_forced_single_switch_defaults():
