@@ -4,7 +4,7 @@ import random
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -28,7 +28,7 @@ def _as_mask(raw):
     if not isinstance(raw, list):
         raise ValueError
     parsed: list[list[int]] = []
-    width: Optional[int] = None
+    width: int | None = None
     for slot in raw:
         if not isinstance(slot, list):
             raise ValueError
@@ -52,6 +52,64 @@ def _valid_actions(actions, mask):
         if not slot_mask[choice]:
             return False
     return True
+
+
+def _drop_sample(payload, filters):
+    if not filters:
+        return False
+    if filters.get("drop_timeouts") and payload.get("timeout"):
+        return True
+    if filters.get("drop_errors") and payload.get("error"):
+        return True
+    stats = payload.get("stats") if isinstance(payload, dict) else {}
+    reward = payload.get("reward")
+    if reward is None and isinstance(stats, dict):
+        reward = stats.get("reward")
+    if reward is not None:
+        min_reward = filters.get("min_reward")
+        if min_reward is not None and reward < min_reward:
+            return True
+    turn = None
+    if isinstance(stats, dict):
+        turn = stats.get("turn")
+    if turn is None:
+        turn = payload.get("turn")
+    if turn is not None:
+        min_turns = filters.get("min_turns")
+        if min_turns is not None and turn < min_turns:
+            return True
+    result = payload.get("result") or (stats.get("result") if isinstance(stats, dict) else None)
+    bad_results = filters.get("drop_results") or []
+    if result in bad_results:
+        return True
+    return False
+
+
+def _sample_weight(payload, cfg):
+    if not cfg:
+        return 1.0
+    weight = 1.0
+    stats = payload.get("stats") if isinstance(payload, dict) else {}
+    result = payload.get("result") or (stats.get("result") if isinstance(stats, dict) else None)
+    if result:
+        weight *= float(cfg.get("by_result", {}).get(result, 1.0))
+    opponent = payload.get("opponent")
+    if opponent:
+        weight *= float(cfg.get("by_opponent", {}).get(opponent, 1.0))
+    reward = payload.get("reward")
+    if reward is None and isinstance(stats, dict):
+        reward = stats.get("reward")
+    reward_scale = cfg.get("reward_scale")
+    if reward is not None and reward_scale:
+        weight += float(reward_scale) * float(reward)
+    clamp_cfg = cfg.get("clamp") or {}
+    w_min = clamp_cfg.get("min")
+    w_max = clamp_cfg.get("max")
+    if w_min is not None:
+        weight = max(float(w_min), weight)
+    if w_max is not None:
+        weight = min(float(w_max), weight)
+    return float(weight)
 
 
 def _parse_payload(payload):
@@ -119,10 +177,11 @@ class ScanResult:
 
 
 def scan_samples(
-    dataset_path: Union[str, Path],
-    max_samples: Optional[int] = None,
+    dataset_path: str | Path,
+    max_samples: int | None = None,
     seed: int = 0,
     shuffle: bool = True,
+    filters: dict | None = None,
 ) -> ScanResult:
     """Scan a JSONL dataset in a streaming fashion to compute stats and byte offsets.
 
@@ -135,11 +194,11 @@ def scan_samples(
 
     offsets: list[int] = []
     count = 0
-    mean: Optional[np.ndarray] = None
-    m2: Optional[np.ndarray] = None
-    binary_flags: Optional[np.ndarray] = None
-    obs_dim: Optional[int] = None
-    action_dim: Optional[int] = None
+    mean: np.ndarray | None = None
+    m2: np.ndarray | None = None
+    binary_flags: np.ndarray | None = None
+    obs_dim: int | None = None
+    action_dim: int | None = None
 
     with path.open("r", encoding="utf-8") as handle:
         while True:
@@ -152,6 +211,8 @@ def scan_samples(
                 continue
             try:
                 payload = json.loads(line)
+                if _drop_sample(payload, filters):
+                    continue
                 observation, actions, mask = _parse_payload(payload)
             except Exception:
                 continue
@@ -211,7 +272,16 @@ def scan_samples(
 class IndexedJsonlDataset(Dataset):
     """Memory-efficient dataset that reads JSONL records on-demand using byte offsets."""
 
-    def __init__(self, dataset_path: Union[str, Path], offsets, mean, std):
+    def __init__(
+        self,
+        dataset_path: str | Path = None,
+        offsets=None,
+        mean=None,
+        std=None,
+        weight_cfg=None,
+        path: str | Path = None,
+    ):
+        dataset_path = dataset_path or path
         self.path = Path(dataset_path)
         self.offsets = list(offsets)
 
@@ -221,9 +291,10 @@ class IndexedJsonlDataset(Dataset):
 
         self._mean = mean_arr
         self._scales = std_arr
-        self._handle: Optional[Any] = None
+        self._handle: Any | None = None
         self._lock = threading.Lock()
         self._worker_handles: dict[int, Any] = {}
+        self._weight_cfg = weight_cfg or {}
 
     def __len__(self) -> int:
         return len(self.offsets)
@@ -258,7 +329,9 @@ class IndexedJsonlDataset(Dataset):
             handle.seek(offset)
             return handle.readline()
 
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(
+        self, index: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         offset = self.offsets[index]
         line = self._read_line(offset)
         if not line:
@@ -272,9 +345,8 @@ class IndexedJsonlDataset(Dataset):
         obs_tensor = torch.from_numpy(obs_array)
         actions_tensor = torch.tensor(actions, dtype=torch.long)
         mask_tensor = torch.tensor(mask, dtype=torch.bool)
-        return obs_tensor, actions_tensor, mask_tensor
+        weight = torch.tensor(_sample_weight(payload, self._weight_cfg), dtype=torch.float32)
+        return obs_tensor, actions_tensor, mask_tensor, weight
 
     def __del__(self) -> None:
         self.close()
-
-
