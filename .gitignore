@@ -247,14 +247,12 @@ docs/plan.md
 docs/plan_data_and_training.md
 docs/next_steps.txt
 
-
+# Outputs (large artifacts)
+outputs/*
+!outputs/eval/
 outputs/eval/*
-outputs/models/*
-outputs/tensorboard/*
-outputs/plots/*
-outputs/sweeps/online*
-outputs/logs/*
-outputs/runs/*
+!outputs/eval/models_eval_combined_20251212.jsonl
+
 
 # Artifacts
 
