@@ -28,6 +28,8 @@ def _build_settings(base, batch_cfg, replica_idx):
         merged["our_team_path"] = Path(merged["our_team_path"])
     if "opponent_teams_dir" in merged:
         merged["opponent_teams_dir"] = Path(merged["opponent_teams_dir"])
+    if "teacher_path" in merged and merged["teacher_path"]:
+        merged["teacher_path"] = Path(merged["teacher_path"])
     prefix = batch_cfg.get("out_path_prefix")
     if not prefix:
         raise ValueError(f"batch {batch_cfg} missing out_path_prefix")

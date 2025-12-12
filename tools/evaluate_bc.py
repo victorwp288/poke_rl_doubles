@@ -3,6 +3,7 @@ import argparse
 import itertools
 import json
 import random
+import shutil
 import sys
 import time
 import uuid
@@ -29,7 +30,8 @@ if str(ROOT) not in sys.path:
 
 from src.config import section  # noqa: E402
 from src.core.features import _legal_orders  # noqa: E402
-from src.online import load_behavior_clone_weights, make_maskable_env  # noqa: E402
+from src.online.env import make_maskable_env  # noqa: E402
+from src.online.init import configure_action_head, load_behavior_clone_weights  # noqa: E402
 from src.utils.teambuilders import read_showdown_team  # noqa: E402
 
 BASELINE_PLAYERS = {
@@ -619,12 +621,18 @@ def _evaluate(model, eval_cfg, server_cfg, team_text):
     opponent_pool = eval_cfg.get("opponent_pool") or [eval_cfg.get("opponent", "simple")]
     battle_format = eval_cfg.get("battle_format", "gen9doublesou")
     watchdog_seconds = float(eval_cfg.get("watchdog_seconds", DEFAULT_WATCHDOG_SECONDS))
+    max_steps = int(eval_cfg.get("max_steps", 300))
     rewards = []
     outcomes = []
     details = []
+    per_opponent = {}
 
     for episode in range(episodes):
         opponent_kind = opponent_pool[episode % len(opponent_pool)]
+        opp_bucket = per_opponent.setdefault(
+            opponent_kind,
+            {"wins": 0, "losses": 0, "draws": 0, "timeouts": 0, "errors": 0, "rewards": []},
+        )
         print(
             f"[eval] episode {episode + 1}/{episodes} opponent={opponent_kind}",
             flush=True,
@@ -685,6 +693,10 @@ def _evaluate(model, eval_cfg, server_cfg, team_text):
             last_progress = time.monotonic()
             total += float(reward[0])
             done = bool(done_arr[0])
+            # If the battle is finished but done is False, force termination.
+            base_env = getattr(env, "envs", [None])[0]
+            base_env = getattr(base_env, "base_env", base_env)
+            battle = getattr(base_env, "battle1", None) if base_env is not None else None
             if info and isinstance(info, list | tuple) and info[0]:
                 last_info = info[0]
                 if "action_mask" in last_info:
@@ -703,7 +715,15 @@ def _evaluate(model, eval_cfg, server_cfg, team_text):
                     if turn is not None and turn != last_turn:
                         last_progress = time.monotonic()
                         last_turn = turn
+                    result = stats.get("result")
+                    if result:
+                        done = True
+            if battle is not None and getattr(battle, "finished", False):
+                done = True
             step_count += 1
+            if max_steps and step_count >= max_steps:
+                print(f"[eval]   max_steps reached ({max_steps}), forcing episode end", flush=True)
+                done = True
             if step_count % 5 == 0 or done:
                 turn = None
                 if isinstance(last_info, dict):
@@ -724,6 +744,7 @@ def _evaluate(model, eval_cfg, server_cfg, team_text):
             result = "error"
         rewards.append(total)
         outcomes.append(result)
+        opp_bucket["rewards"].append(total)
         details.append(
             {
                 "episode": episode,
@@ -736,7 +757,17 @@ def _evaluate(model, eval_cfg, server_cfg, team_text):
                 "steps": step_count,
             }
         )
-    return rewards, outcomes, details
+        if result == "win":
+            opp_bucket["wins"] += 1
+        elif result == "draw":
+            opp_bucket["draws"] += 1
+        elif result == "timeout":
+            opp_bucket["timeouts"] += 1
+        elif result == "error":
+            opp_bucket["errors"] += 1
+        else:
+            opp_bucket["losses"] += 1
+    return rewards, outcomes, details, per_opponent
 
 
 def build_arg_parser(defaults):
@@ -753,10 +784,19 @@ def build_arg_parser(defaults):
     parser.add_argument("--battle-format", type=str, default=defaults.get("battle_format"))
     parser.add_argument("--tensorboard-dir", type=Path, default=defaults.get("tensorboard_dir"))
     parser.add_argument("--output-path", type=Path, default=defaults.get("output_path"))
+    parser.add_argument("--summary-path", type=Path, default=defaults.get("summary_path"))
     parser.add_argument("--checkpoint", type=Path, default=defaults.get("checkpoint"))
     parser.add_argument("--stats-path", type=Path, default=defaults.get("stats_path"))
     parser.add_argument("--our-team-path", type=Path, default=defaults.get("our_team_path"))
     parser.add_argument("--server-url", type=str, default=defaults.get("server_url"))
+    parser.add_argument(
+        "--gate-best-on-win-rate",
+        action="store_true",
+        default=defaults.get("gate_best_on_win_rate", False),
+    )
+    parser.add_argument("--best-metrics-path", type=Path, default=defaults.get("best_metrics_path"))
+    parser.add_argument("--best-policy-path", type=Path, default=defaults.get("best_policy_path"))
+    parser.add_argument("--best-stats-path", type=Path, default=defaults.get("best_stats_path"))
 
     return parser
 
@@ -770,10 +810,14 @@ def merge_cli_overrides(defaults, args):
         "battle_format",
         "tensorboard_dir",
         "output_path",
+        "summary_path",
         "checkpoint",
         "stats_path",
         "our_team_path",
         "server_url",
+        "best_metrics_path",
+        "best_policy_path",
+        "best_stats_path",
     ]:
         value = getattr(args, key)
         if value is not None:
@@ -781,6 +825,8 @@ def merge_cli_overrides(defaults, args):
 
     if args.opponent_pool:
         settings["opponent_pool"] = [x.strip() for x in args.opponent_pool.split(",") if x.strip()]
+    if getattr(args, "gate_best_on_win_rate", False):
+        settings["gate_best_on_win_rate"] = True
 
     return settings
 
@@ -796,10 +842,15 @@ def load_defaults():
         "battle_format": bc.get("battle_format", "gen9doublesou"),
         "tensorboard_dir": Path(bc.get("tensorboard_dir", "outputs/tensorboard/eval")),
         "output_path": Path(bc.get("output_path", "outputs/eval/bc_vs_bots.jsonl")),
+        "summary_path": bc.get("summary_path"),
         "checkpoint": Path(bc.get("checkpoint", "outputs/models/bc_policy.pt")),
         "stats_path": Path(bc.get("stats_path", "outputs/models/bc_stats.json")),
         "our_team_path": Path(bc.get("our_team_path", "teams/gen9dou_fixed.txt")),
         "server_url": bc.get("server_url", "http://localhost:8000"),
+        "gate_best_on_win_rate": bc.get("gate_best_on_win_rate", False),
+        "best_metrics_path": bc.get("best_metrics_path"),
+        "best_policy_path": bc.get("best_policy_path"),
+        "best_stats_path": bc.get("best_stats_path"),
     }
 
 
@@ -863,6 +914,10 @@ def main():
         policy_kwargs=_policy_kwargs(),
     )
 
+    offline_cfg = section("offline") or {}
+    head_hidden = eval_cfg.get("policy_head_mlp_dim") or offline_cfg.get("head_mlp_dim") or 512
+    configure_action_head(model.policy, head_hidden)
+
     # verify action space before loading weights
     action_space = env.envs[0].action_space
     if isinstance(action_space, spaces.MultiDiscrete):
@@ -881,13 +936,16 @@ def main():
     if hasattr(action_dist, "action_dims"):
         print(f"[info] action_dims={action_dist.action_dims}", flush=True)
 
-    rewards, outcomes, details = _evaluate(model, eval_cfg, server_cfg, team_text)
+    rewards, outcomes, details, per_opponent = _evaluate(model, eval_cfg, server_cfg, team_text)
     wins = sum(1 for result in outcomes if result == "win")
     losses = sum(1 for result in outcomes if result == "loss")
     draws = sum(1 for result in outcomes if result == "draw")
     mean_reward = float(np.mean(rewards)) if rewards else 0.0
+    total_episodes = len(outcomes) or 1
+    win_rate = wins / total_episodes
     print(
-        f"[eval] episodes={len(outcomes)} win={wins} loss={losses} draw={draws} reward_mean={mean_reward:.3f}",
+        f"[eval] episodes={len(outcomes)} win={wins} loss={losses} draw={draws} "
+        f"reward_mean={mean_reward:.3f} win_rate={win_rate:.3f}",
         flush=True,
     )
     out_path = Path(eval_cfg.get("output_path", "outputs/eval/bc_eval.jsonl"))
@@ -895,14 +953,78 @@ def main():
     with out_path.open("w", encoding="utf-8") as handle:
         for record in details:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    summary = {
+        "episodes": len(outcomes),
+        "wins": wins,
+        "losses": losses,
+        "draws": draws,
+        "win_rate": win_rate,
+        "mean_reward": mean_reward,
+        "per_opponent": {},
+    }
+    for opponent_kind, bucket in per_opponent.items():
+        opp_total = (
+            bucket["wins"]
+            + bucket["losses"]
+            + bucket["draws"]
+            + bucket["timeouts"]
+            + bucket["errors"]
+        ) or 1
+        opp_mean_reward = float(np.mean(bucket["rewards"])) if bucket["rewards"] else 0.0
+        summary["per_opponent"][opponent_kind] = {
+            "wins": bucket["wins"],
+            "losses": bucket["losses"],
+            "draws": bucket["draws"],
+            "timeouts": bucket["timeouts"],
+            "errors": bucket["errors"],
+            "win_rate": bucket["wins"] / opp_total,
+            "mean_reward": opp_mean_reward,
+        }
+    summary_path = Path(
+        eval_cfg.get("summary_path") or out_path.with_name(f"{out_path.stem}_summary.json")
+    )
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[eval] summary -> {summary_path}", flush=True)
     if writer is not None:
-        total = len(outcomes) or 1
-        writer.add_scalar("eval/win_rate", wins / total, 0)
-        writer.add_scalar("eval/loss_rate", losses / total, 0)
-        writer.add_scalar("eval/draw_rate", draws / total, 0)
+        writer.add_scalar("eval/win_rate", win_rate, 0)
+        writer.add_scalar("eval/loss_rate", losses / total_episodes, 0)
+        writer.add_scalar("eval/draw_rate", draws / total_episodes, 0)
         writer.add_scalar("eval/reward_mean", mean_reward, 0)
         writer.flush()
         writer.close()
+
+    if eval_cfg.get("gate_best_on_win_rate"):
+        best_metrics_path = Path(
+            eval_cfg.get("best_metrics_path") or out_path.with_name(f"{out_path.stem}_best.json")
+        )
+        best_policy_path = eval_cfg.get("best_policy_path")
+        best_stats_path = eval_cfg.get("best_stats_path")
+        previous_best = None
+        if best_metrics_path.exists():
+            try:
+                previous = json.loads(best_metrics_path.read_text(encoding="utf-8"))
+                previous_best = float(previous.get("win_rate", 0.0))
+            except Exception:
+                previous_best = None
+        improved = previous_best is None or win_rate > previous_best
+        if improved:
+            best_metrics_path.write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            print(f"[eval] new best win_rate={win_rate:.3f} -> {best_metrics_path}", flush=True)
+            if best_policy_path:
+                try:
+                    shutil.copy2(checkpoint, Path(best_policy_path))
+                    print(f"[eval] copied checkpoint to {best_policy_path}", flush=True)
+                except Exception as exc:
+                    print(f"[warn] failed to copy best policy: {exc}", flush=True)
+            if best_stats_path and stats_path and Path(stats_path).exists():
+                try:
+                    shutil.copy2(Path(stats_path), Path(best_stats_path))
+                    print(f"[eval] copied stats to {best_stats_path}", flush=True)
+                except Exception as exc:
+                    print(f"[warn] failed to copy best stats: {exc}", flush=True)
 
 
 if __name__ == "__main__":

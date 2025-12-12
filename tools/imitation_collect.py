@@ -9,6 +9,7 @@ import sys
 import uuid
 from pathlib import Path
 
+import numpy as np
 from poke_env import (
     AccountConfiguration,
     LocalhostServerConfiguration,
@@ -25,6 +26,7 @@ if str(ROOT) not in sys.path:
 from src.config import section  # noqa: E402
 from src.core.env import action_space_size  # noqa: E402
 from src.core.features import encode_observation, slot_action_mask  # noqa: E402
+from src.online.init import load_maskable_policy  # noqa: E402
 from src.utils.teambuilders import (  # noqa: E402
     RotatingTeambuilder,
     constant_team_from_text,
@@ -164,7 +166,78 @@ class RecordingHeuristics(SimpleHeuristicsPlayer):
         return order
 
 
+class PolicyTeacherPlayer(SimpleHeuristicsPlayer):
+    """
+    Player that uses a saved MaskablePPO policy to select actions.
+    Falls back to SimpleHeuristics if the policy proposes an invalid order.
+    """
+
+    def __init__(self, recorder, act_size, model_path, **kwargs):
+        self._recorder = recorder
+        self._act_size = act_size
+        self._model_path = Path(model_path)
+        if not self._model_path.exists():
+            raise FileNotFoundError(f"policy teacher checkpoint not found: {self._model_path}")
+        self._model = load_maskable_policy(self._model_path, device="cpu")
+        super().__init__(**kwargs)
+
+    def choose_move(self, battle):
+        mask0 = slot_action_mask(battle, 0, self._act_size)
+        mask1 = slot_action_mask(battle, 1, self._act_size)
+        concat_mask = np.concatenate([mask0, mask1]).astype(np.int8)
+        obs = np.asarray(encode_observation(battle), dtype=np.float32)
+
+        order = None
+        action = None
+        try:
+            action, _ = self._model.predict(obs, action_masks=concat_mask, deterministic=True)
+            action = np.asarray(action, dtype=int)
+            if action.shape[0] == 2:
+                order = DoublesEnv.action_to_order(action, battle, fake=False, strict=False)
+        except Exception as exc:  # pragma: no cover - robustness path
+            print(f"[warn] policy teacher predict failed: {exc}", flush=True)
+
+        # Fallback if policy output is unusable
+        if order is None:
+            order = super().choose_move(battle)
+            action = _action_to_tuple(order, battle)
+
+        record = {
+            "battle_tag": battle.battle_tag,
+            "turn": battle.turn,
+            "teacher": "PolicyTeacher",
+            "format": battle.format,
+            "observation": obs.tolist(),
+            "action": [int(action[0]), int(action[1])],
+            "mask": [mask0, mask1],
+        }
+        self._recorder.write(record)
+        return order
+
+
+def _battle_summary(battle, outcome, opponent_kind, settings, *, timeout=False, error=None):
+    result = "draw"
+    if getattr(battle, "won", False):
+        result = "win"
+    elif getattr(battle, "lost", False):
+        result = "loss"
+    elif outcome:
+        result = outcome
+    return {
+        "battle_tag": battle.battle_tag,
+        "result": result,
+        "turns": getattr(battle, "turn", None),
+        "timeout": bool(timeout),
+        "error": error,
+        "opponent": opponent_kind,
+        "teacher": settings.teacher_kind,
+        "format": getattr(battle, "format", None),
+    }
+
+
 def _make_player(kind, *, record=False, **kwargs):
+    kwargs = dict(kwargs)
+    model_path = kwargs.pop("model_path", None)
     kind = kind.lower()
     if kind in {"simple", "heuristic", "simpleheuristics"}:
         if record:
@@ -181,6 +254,14 @@ def _make_player(kind, *, record=False, **kwargs):
         return MaxBasePowerPlayer(**kwargs)
     if kind == "random":
         return RandomPlayer(**kwargs)
+    if kind == "policy":
+        if model_path is None:
+            raise ValueError("policy teacher_kind requires model_path (teacher_path)")
+        recorder = kwargs.pop("recorder")
+        act_size = kwargs.pop("act_size")
+        return PolicyTeacherPlayer(
+            recorder=recorder, act_size=act_size, model_path=model_path, **kwargs
+        )
     raise ValueError(f"unknown player kind: {kind}")
 
 
@@ -188,6 +269,8 @@ class Settings:
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+        if not hasattr(self, "teacher_path"):
+            self.teacher_path = None
         if not hasattr(self, "max_concurrent_battles"):
             self.max_concurrent_battles = 1
         if not hasattr(self, "opponent_concurrency"):
@@ -215,6 +298,7 @@ def _build_teacher(*, settings, recorder, act_size, server_cfg, our_team_text):
         record=True,
         recorder=recorder,
         act_size=act_size,
+        model_path=settings.teacher_path,
         battle_format=settings.battle_format,
         team=constant_team_from_text(our_team_text),
         server_configuration=server_cfg,
@@ -239,6 +323,7 @@ async def play_dataset(settings):
 
     our_team_text = read_showdown_team(settings.our_team_path)
     opponent_pool = _opponent_pool(settings, our_team_text)
+    seen_tags: set[str] = set()
 
     def _cleanup(player):
         with contextlib.suppress(Exception):
@@ -270,6 +355,9 @@ async def play_dataset(settings):
                 f"[info] starting battle {battle_idx + 1}/{settings.n_battles} vs {opponent_kind}",
                 flush=True,
             )
+            outcome = None
+            timeout = False
+            err_msg = None
             try:
                 wins_before = teacher.n_won_battles
                 losses_before = teacher.n_lost_battles
@@ -291,8 +379,25 @@ async def play_dataset(settings):
                     flush=True,
                 )
             except TimeoutError:
+                timeout = True
+                err_msg = "timeout"
                 print(f"[warn] battle {battle_idx + 1}: timeout (likely rejected team)")
             finally:
+                new_tags = [tag for tag in teacher.battles if tag not in seen_tags]
+                for tag in new_tags:
+                    battle_obj = teacher.battles.get(tag)
+                    if battle_obj is None:
+                        continue
+                    summary = _battle_summary(
+                        battle_obj,
+                        outcome=outcome,
+                        opponent_kind=opponent_kind,
+                        settings=settings,
+                        timeout=timeout,
+                        error=err_msg,
+                    )
+                    recorder.write(summary)
+                    seen_tags.add(tag)
                 _cleanup(opponent)
         print(
             f"[info] teacher results -> wins={stats['wins']} losses={stats['losses']} draws={stats['draws']}",
@@ -315,6 +420,7 @@ def load_settings():
         our_team_path=Path(config.get("our_team_path", "teams/gen9dou_fixed.txt")),
         opponent_teams_dir=Path(config.get("opponent_teams_dir", "teams")),
         teacher_kind=config.get("teacher_kind", "simple"),
+        teacher_path=config.get("teacher_path"),
         opponents_kinds=list(config.get("opponents", ["simple", "maxbp", "random"])),
         out_path=Path(config.get("out_path", "data/processed/imitation.jsonl")),
         battle_timeout=float(config.get("battle_timeout", 60.0)),
@@ -347,6 +453,7 @@ def main():
     parser.add_argument("--our-team-path", type=str)
     parser.add_argument("--opponent-teams-dir", type=str)
     parser.add_argument("--teacher-kind", type=str)
+    parser.add_argument("--teacher-path", type=str)
     parser.add_argument("--opponents", nargs="*")
     parser.add_argument("--out-path", type=str)
     parser.add_argument("--battle-timeout", type=float)
@@ -371,6 +478,8 @@ def main():
         base.opponent_teams_dir = Path(args.opponent_teams_dir)
     if args.teacher_kind is not None:
         base.teacher_kind = args.teacher_kind
+    if args.teacher_path is not None:
+        base.teacher_path = Path(args.teacher_path)
     if args.opponents is not None:
         base.opponents_kinds = args.opponents
     if args.out_path is not None:
