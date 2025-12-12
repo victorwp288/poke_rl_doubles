@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.online import run  # noqa: E402
+from tools.online import parse_override_pairs, run  # noqa: E402
 
 
 def main():
@@ -18,10 +18,18 @@ def main():
         default="warmstart",
         help="Override the default 'warmstart' mode passed to tools.online.run()",
     )
+    parser.add_argument(
+        "--override",
+        type=str,
+        action="append",
+        help="Override configuration settings in key=value format. "
+        "For example: --override parallel_battles=16 --override console_log_mode='off'",
+    )
 
-    parser.parse_args()
+    args = parser.parse_args()
 
-    run("args.mode")
+    overrides = parse_override_pairs(args.override)
+    run(args.mode, overrides or None)
 
 
 if __name__ == "__main__":

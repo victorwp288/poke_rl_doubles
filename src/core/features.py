@@ -638,7 +638,7 @@ def slot_action_mask(battle, slot, act_size):
         _build_slot_action_mask(battle, 1, act_size),
     ]
     battle._slot_action_cache = {"token": token, "act_size": act_size, "masks": masks}
-    return masks[slot]
+    return list(masks[slot])
 
 
 def _build_slot_action_mask(battle, slot, act_size):

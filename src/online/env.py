@@ -239,7 +239,24 @@ class Gen9DoublesEnv(DoublesEnv):
 
 
 class MaskableDoublesEnv(SingleAgentWrapper):
-    def __init__(self, base_env, opponent, *, step_delay=0.0):
+    _global_log_lock = threading.Lock()
+    _global_last_log_time = 0.0
+    _global_ema_reward = 0.0
+    _global_ema_count = 0
+    _global_last_reward = 0.0
+    _global_last_sps = 0.0
+    _global_last_turn = None
+    _global_last_step = 0
+
+    def __init__(
+        self,
+        base_env,
+        opponent,
+        *,
+        step_delay=0.0,
+        console_log_mode="off",
+        console_log_interval_sec=5.0,
+    ):
         self._act_size = action_space_size(base_env._battle_format)
         super().__init__(base_env, opponent)
         if isinstance(self.action_space, spaces.MultiDiscrete) and len(self.action_space.nvec) >= 1:
@@ -254,6 +271,16 @@ class MaskableDoublesEnv(SingleAgentWrapper):
         self._start_time = now
         self._step_counter = 0
         self._last_logged_turn = None
+        # Normalize console_log_mode; accept booleans and strings.
+        if console_log_mode is False:
+            mode_token = "off"
+        else:
+            mode_token = str(console_log_mode or "summary").strip().lower()
+            if mode_token not in {"summary", "debug", "off"}:
+                mode_token = "summary"
+        self._console_log_mode = mode_token
+        self._console_log_interval_sec = max(float(console_log_interval_sec or 0.0), 0.0)
+        self._last_console_log_time = now
         root = Path(__file__).resolve().parents[2]
         self._log_path = root / "outputs" / "logs" / "online_env.log"
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -748,7 +775,19 @@ class MaskableDoublesEnv(SingleAgentWrapper):
                     result=result,
                     order_desc=order_desc,
                 )
-                print(message, flush=True)
+                if self._should_print_step_log(
+                    reward_value=reward_value,
+                    result=result,
+                    changed=retry_changed,
+                    repaired=retry_repaired,
+                ):
+                    print(message, flush=True)
+                self._maybe_global_summary_log(
+                    reward_value=reward_value,
+                    sps=sps,
+                    turn=turn,
+                    result=result,
+                )
                 self._write_step_log(message, info)
                 return (obs, reward, terminated, truncated, info), None
             except AssertionError as exc:
@@ -869,6 +908,45 @@ class MaskableDoublesEnv(SingleAgentWrapper):
             self._timeout_triggered = False
         return info
 
+    def _should_print_step_log(self, reward_value, result, changed, repaired):
+        mode = self._console_log_mode
+        if mode == "off":
+            return False
+        if mode == "debug":
+            return True
+        # Summary and other modes: suppress per-step logging; training callback handles summaries.
+        return False
+
+    def _maybe_global_summary_log(self, reward_value, sps, turn, result):
+        # No-op by default; summary printing is handled by the training callback.
+        if self._console_log_mode != "debug":
+            return
+        now = time.monotonic()
+        cls = self.__class__
+        with cls._global_log_lock:
+            alpha = 0.1
+            if cls._global_ema_count == 0:
+                cls._global_ema_reward = reward_value
+            else:
+                cls._global_ema_reward += alpha * (reward_value - cls._global_ema_reward)
+            cls._global_ema_count += 1
+            cls._global_last_reward = reward_value
+            cls._global_last_sps = sps
+            cls._global_last_turn = turn
+            cls._global_last_step = max(cls._global_last_step, self._step_counter)
+            if now - cls._global_last_log_time < self._console_log_interval_sec:
+                return
+            cls._global_last_log_time = now
+            message = (
+                f"[online env] debug_summary step={cls._global_last_step} "
+                f"sps={cls._global_last_sps:.1f} "
+                f"reward_last={cls._global_last_reward:.3f} "
+                f"reward_ema={cls._global_ema_reward:.3f}"
+            )
+            if cls._global_last_turn is not None:
+                message += f" turn={cls._global_last_turn}"
+            print(message, flush=True)
+
     def _write_step_log(self, message, info):
         if not hasattr(self, "_log_path"):
             return
@@ -887,6 +965,13 @@ class MaskableDoublesEnv(SingleAgentWrapper):
         if self._log_handle is None:
             self._log_handle = self._log_path.open("a", encoding="utf-8")
         return self._log_handle
+
+    def latest_global_stats(self):
+        base = getattr(self, "base_env", None)
+        if base is None:
+            return None
+        getter = getattr(base, "latest_global_stats", None)
+        return getter() if callable(getter) else None
 
     def _close_log_handle(self):
         if self._log_handle is not None:
@@ -958,10 +1043,23 @@ class MaskableDoublesEnv(SingleAgentWrapper):
 
 
 def make_maskable_env(
-    *, opponent, battle_format="gen9doublesou", rewards=None, step_delay=0.0, **env_kwargs
+    *,
+    opponent,
+    battle_format="gen9doublesou",
+    rewards=None,
+    step_delay=0.0,
+    console_log_mode="off",
+    console_log_interval_sec=5.0,
+    **env_kwargs,
 ):
     base_env = Gen9DoublesEnv(battle_format=battle_format, rewards=rewards, **env_kwargs)
-    return MaskableDoublesEnv(base_env=base_env, opponent=opponent, step_delay=step_delay)
+    return MaskableDoublesEnv(
+        base_env=base_env,
+        opponent=opponent,
+        step_delay=step_delay,
+        console_log_mode=console_log_mode,
+        console_log_interval_sec=console_log_interval_sec,
+    )
 
 
 __all__ = ["Gen9DoublesEnv", "MaskableDoublesEnv", "make_maskable_env"]

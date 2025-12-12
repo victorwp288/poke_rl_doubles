@@ -137,6 +137,11 @@ class KLRegularizedMaskablePPO(MaskablePPO):
             if self.clip_range_vf is not None
             else None
         )
+        ent_coef_value = (
+            self.ent_coef(self._current_progress_remaining)
+            if callable(self.ent_coef)
+            else self.ent_coef
+        )
 
         stats = {
             "entropy": [],
@@ -194,7 +199,7 @@ class KLRegularizedMaskablePPO(MaskablePPO):
 
                 loss = (
                     policy_loss
-                    + self.ent_coef * entropy_loss
+                    + ent_coef_value * entropy_loss
                     + self.vf_coef * value_loss
                     + kl_coef * kl_term
                 )

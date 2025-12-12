@@ -1,13 +1,36 @@
 import json
 from pathlib import Path, PosixPath
 
+import numpy as np
 import torch
+from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
+from sb3_contrib.ppo_mask import MaskablePPO
+from stable_baselines3.common.save_util import load_from_zip_file
 from torch import nn
 from torch.serialization import add_safe_globals
 
-add_safe_globals([Path, PosixPath])
+# Allow safe loading of checkpoints that include numpy objects. Some numpy builds may
+# lack certain dtypes; keep this registration best-effort.
+try:
+    add_safe_globals(
+        [
+            Path,
+            PosixPath,
+            np.core.multiarray._reconstruct,
+            np.ndarray,
+            np.dtype,
+            np.float32,
+            np.float64,
+            getattr(np.dtypes, "Float32DType", np.float32),
+            getattr(np.dtypes, "Float64DType", np.float64),
+        ]
+    )
+except Exception as exc:  # pragma: no cover
+    print(f"[online-init] warning: add_safe_globals skipped ({exc})")
 
 HEAD_KEYS = ("head_a", "head_b")
+HEAD_MLP_KEY = "head_mlp"
+_DEFAULT_HEAD_HIDDEN = 512
 
 
 class NormalizationStats:
@@ -28,7 +51,7 @@ def _linear_layers(block):
 
 
 def _load_checkpoint(checkpoint_path):
-    payload = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    payload = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     if isinstance(payload, dict):
         state_dict = payload.get("state_dict", payload)
         metadata = payload
@@ -124,7 +147,9 @@ def _action_linear_head(policy):
     if isinstance(action_net, nn.Linear):
         return action_net
     if isinstance(action_net, nn.Sequential) and action_net:
-        for module in action_net:
+        # When action_net is a multi-layer head (e.g., configured by configure_action_head),
+        # we want the final Linear that produces action logits, not the first hidden layer.
+        for module in reversed(action_net):
             if isinstance(module, nn.Linear):
                 return module
     return action_net
@@ -169,9 +194,128 @@ def load_behavior_clone_weights(policy, checkpoint_path, stats_path=None):
         device=device,
         checkpoint_path=checkpoint_path,
     )
-    _apply_action_heads(policy=policy, heads=head_pairs)
+    applied = False
+    # If action_net is a two-layer MLP (Linear, activation, Linear), try to map BC head_mlp + heads.
+    if isinstance(policy.action_net, nn.Sequential) and len(policy.action_net) >= 3:
+        first = next((m for m in policy.action_net if isinstance(m, nn.Linear)), None)
+        last = next((m for m in reversed(policy.action_net) if isinstance(m, nn.Linear)), None)
+        if first is not None and last is not None:
+            head_mlp_weight = state_dict.get(f"{HEAD_MLP_KEY}.0.weight")
+            head_mlp_bias = state_dict.get(f"{HEAD_MLP_KEY}.0.bias")
+            if head_mlp_weight is not None and head_mlp_bias is not None:
+                head_mlp_weight = head_mlp_weight.to(device)
+                head_mlp_bias = head_mlp_bias.to(device)
+                head_hidden = head_mlp_weight.shape[0]
+                total_hidden = head_hidden * 2
+                if (
+                    first.weight.shape[0] == total_hidden
+                    and first.weight.shape[1] == head_mlp_weight.shape[1]
+                ):
+                    with torch.no_grad():
+                        first.weight[:head_hidden].copy_(head_mlp_weight)
+                        first.weight[head_hidden:].copy_(head_mlp_weight)
+                        first.bias[:head_hidden].copy_(head_mlp_bias)
+                        first.bias[head_hidden:].copy_(head_mlp_bias)
+                    total_actions = sum(getattr(policy.action_dist, "action_dims", []))
+                    if (
+                        last.weight.shape[0] == total_actions
+                        and last.weight.shape[1] == total_hidden
+                    ):
+                        offset = 0
+                        with torch.no_grad():
+                            for dim_size, (w, b) in zip(
+                                getattr(policy.action_dist, "action_dims", []),
+                                head_pairs,
+                                strict=False,
+                            ):
+                                # determine slot index: 0 or 1
+                                slot_index = 0 if offset == 0 else 1
+                                col_start = slot_index * head_hidden
+                                col_end = col_start + head_hidden
+                                rows = slice(offset, offset + dim_size)
+                                last.weight[rows, :] = 0.0
+                                last.weight[rows, col_start:col_end].copy_(w)
+                                last.bias[rows].copy_(b)
+                                offset += dim_size
+                        applied = True
+    if not applied:
+        _apply_action_heads(policy=policy, heads=head_pairs)
 
     return stats
 
 
-__all__ = ["load_behavior_clone_weights", "NormalizationStats"]
+def configure_action_head(policy, head_hidden_dim):
+    """Replace the SB3 action_net with a two-layer MLP head while keeping output dims the same."""
+    action_dims = getattr(policy.action_dist, "action_dims", [])
+    if not action_dims:
+        return
+    total_actions = sum(action_dims)
+    current = _action_linear_head(policy)
+    if not isinstance(current, nn.Linear):
+        return
+    in_features = current.in_features
+    head_hidden_dim = int(head_hidden_dim)
+    if head_hidden_dim <= 0:
+        return
+    device = _policy_device(policy)
+    new_head = nn.Sequential(
+        nn.Linear(in_features, head_hidden_dim * 2),
+        nn.GELU(),
+        nn.Linear(head_hidden_dim * 2, total_actions),
+    ).to(device)
+    policy.action_net = new_head
+
+
+def _infer_action_head_hidden_dim(checkpoint_path):
+    try:
+        _, params, _ = load_from_zip_file(
+            str(checkpoint_path), device="cpu", custom_objects={"kl_reference_policy": None}
+        )
+        return _infer_action_head_hidden_dim_from_params(params)
+    except Exception as exc:  # pragma: no cover - defensive path
+        print(f"[online-init] warning: failed to infer action head dim: {exc}")
+    return None
+
+
+def _infer_action_head_hidden_dim_from_params(params):
+    policy_params = params.get("policy", {}) if isinstance(params, dict) else {}
+    if isinstance(policy_params, dict):
+        weight = policy_params.get("action_net.0.weight")
+        if weight is not None and weight.ndim == 2 and weight.shape[0] % 2 == 0:
+            return int(weight.shape[0] // 2)
+    return None
+
+
+class MaskablePolicyWithHead(MaskableActorCriticPolicy):
+    def __init__(self, *args, action_head_hidden_dim=None, **kwargs):
+        self._action_head_hidden_dim = action_head_hidden_dim
+        super().__init__(*args, **kwargs)
+        hidden_dim = self._action_head_hidden_dim or _DEFAULT_HEAD_HIDDEN
+        configure_action_head(self, hidden_dim)
+
+
+def load_maskable_policy(checkpoint_path, *, device="cpu", head_hidden_dim=None):
+    checkpoint_path = Path(checkpoint_path)
+    # Load once to read saved policy kwargs and params without instantiating a model yet.
+    data, params, _ = load_from_zip_file(
+        str(checkpoint_path), device=device, custom_objects={"kl_reference_policy": None}
+    )
+    policy_kwargs = dict(data.get("policy_kwargs", {}) or {})
+    inferred_dim = head_hidden_dim or _infer_action_head_hidden_dim_from_params(params)
+    policy_kwargs["action_head_hidden_dim"] = inferred_dim or _DEFAULT_HEAD_HIDDEN
+
+    custom_objects = {
+        "kl_reference_policy": None,
+        "policy_class": MaskablePolicyWithHead,
+        "policy_kwargs": policy_kwargs,
+    }
+    return MaskablePPO.load(str(checkpoint_path), device=device, custom_objects=custom_objects)
+
+
+__all__ = [
+    "load_behavior_clone_weights",
+    "NormalizationStats",
+    "configure_action_head",
+    "load_maskable_policy",
+    "MaskablePolicyWithHead",
+]
