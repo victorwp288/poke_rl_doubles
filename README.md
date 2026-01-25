@@ -4,95 +4,115 @@ Start: Thu, 11 September 2025
 Hand‑in: Thu, 18 December 2025 at 10:00 CET
 
 ## Overview
-PPO‑based agent built on Stable‑Baselines3 (PyTorch) that plays
-**Generation 9 Doubles (OU)** via **poke‑env**. Training focuses on a local
-Showdown simulator first; light online evaluation happens on a labeled bot
-account with polite rate limits. We evaluate offline vs heuristics and via
-ladder rating.
+PPO‑based agent built on Stable‑Baselines3 (PyTorch) that plays **Generation 9 Doubles (OU)** via
+**poke‑env**. The pipeline is two‑stage: offline imitation learning (behavioral cloning) followed by
+online RL fine‑tuning (maskable PPO). Evaluation uses heuristic baselines plus policy cross‑play.
 
-Little related experiment: https://github.com/victorwp288/poke-rl-demo
+Related demo: https://github.com/victorwp288/poke-rl-demo
+
+## How to Read This Repo
+- Start with `docs/ARCHITECTURE.md` for the component map and core contracts.
+- Then read `docs/DATAFLOW.md` for the offline/online/eval pipelines end‑to‑end.
+- Use `docs/CONFIG.md` when you need to understand `config/defaults.yaml`.
+- `docs/codebase_walkthrough.md` is a short, file‑level tour for quick orientation.
 
 ## Quick Start
-Prereqs: Python 3.11. 
+Prereqs: Python 3.11
 
 ```bash
-
 ./init.sh
-
-# fallback manual install
+# fallback manual install:
 # pip install -r requirements.txt
 
 # smoke‑test the environment
 python tests/smoke_test_env.py
 
-# collect imitation data (optional, adjust config/defaults.yaml first)
-python tools/imitation_collect.py
+# collect imitation data (optional; adjust config/defaults.yaml first)
+python tools/collect_dataset.py collect
 
 # merge shard outputs into a single dataset (uses imitation_merge config)
-python tools/imitation_merge.py
-
-# orchestrate multi-shard imitation batches (see config/imitation_batches)
-python tools/imitation_batch.py
+python tools/collect_dataset.py merge
 
 # train the behavior cloning policy
-python tools/offline.py
+python tools/offline_train.py
 
-# evaluate the BC policy against bots
-python tools/evaluate_bc.py
+# run PPO training (scratch or warmstart)
+python tools/online.py scratch
+python tools/online.py warmstart
 
-# run warmstart + scratch PPO back to back
-python tools/run_ppo_compare.py
-
-# inspect losses in TensorBoard
-tensorboard --logdir outputs/tensorboard
+# evaluate saved PPO checkpoints
+python tools/eval_models.py --policy scratch=outputs/models/maskable_ppo_scratch_best.zip --episodes 200
 ```
 
-## Development
-- Lint/format/type‑check: `ruff format . && ruff check --fix . && mypy src`
-- Web viewer: `python web/viewer_gradio.py`
-- Optional: set up pre‑commit hooks: `pre-commit install`
-
 ## Project Structure
-- `src/` — reusable library code (Python 3.11)
-  - `src/core/` — shared helpers and environment wiring
-  - `src/offline/` — dataset loader, policy, trainer
-  - `src/online/` — reserved for PPO work
-- `tools/` — simple entry points (train offline, sweep, data fetch/parse)
-- `tests/` — smoke tests and simple unit tests
-- `docs/` — notes and design docs
-- `teams/` — example Pokémon team exports for experiments
+- `src/core/` — observation encoding, action masks, shared constants
+  - `constants.py` (feature tables), `observation/` (encode_observation), `action_mask.py`
+- `src/offline/` — imitation learning pipeline
+  - `collect/` (dataset collection), `dataset/` (parsing + filtering),
+    `model.py` (BC policy), `train/` (CLI + sweeps), `eval_bc/` (BC eval)
+- `src/online/` — PPO training + evaluation utilities
+  - `env.py` + `env_mask_*` (maskable env + repair), `policy/` (warmstart + load),
+    `train/` (model/callbacks/grid/batch), `eval/` (evaluation suite), `kl_ppo.py`
+- `src/data/` — replay fetch + parse utilities used by collectors
+- `tools/` — CLI entrypoints for data, training, evaluation
+- `tests/` — CPU/MPS‑only unit + smoke tests; golden fixtures under `tests/fixtures/`
 
+## Entrypoints (CLI)
+Run any tool with `--help` for full flags. Subcommands are optional; omitting a subcommand preserves the
+legacy behavior.
 
+- `python tools/online.py [train] MODE [--override key=value ...]` — main PPO entrypoint.
+- `python tools/online.py grid [--limit N] [modes ...]` — PPO grid search by config.
+- `python tools/online.py batch [modes ...]` — run multiple PPO modes sequentially.
+
+- `python tools/offline_train.py [train] [--dataset-path PATH] [--epochs N] [--device DEV] [--num-workers N] [--batch-size N] [--learning-rate LR]`
+  — BC training.
+- `python tools/offline_train.py grid [--limit N] [--output PATH] [--offline JSON] [--sweep JSON]`
+  — BC grid search.
+- `python tools/offline_train.py sweep [--out-dir DIR] [--dataset-path PATH] [--device DEV] [--epochs N] [--num-workers N]`
+  — BC sweep over canned trials.
+- `python tools/offline_train.py eval-bc [--episodes N] [--opponent KIND] [--opponent-pool CSV] [--checkpoint PATH] [--stats-path PATH] ...`
+  — BC vs bots.
+
+- `python tools/eval_models.py [--policy label=path ...] [--episodes N] [--env-mode MODE] [--opponents ...] [--crossplay] [--mirror]`
+  — PPO evaluation suite with heuristic/policy opponents.
+- `python tools/eval_models.py compare --policy PATH --episodes N [MODE] [--override key=value ...]` — PPO vs heuristics.
+- `python tools/eval_models.py suite --policy PATH [--episodes N] [--server-url URL]` — fixed eval suite.
+- `python tools/eval_models.py ppo [--checkpoint PATH] [--episodes N] [--battle_format FMT] [--team_path PATH] [--server_url URL]`
+  — PPO vs simple heuristics.
+- `python tools/eval_models.py bc [--episodes N] [--opponent KIND] [--opponent-pool CSV] [--checkpoint PATH] [--stats-path PATH] ...`
+  — BC vs bots.
+
+- `python tools/collect_dataset.py [collect] [--n-battles N] [--server-url URL] [--battle-format FMT] [--our-team-path PATH] [--opponents ...] ...`
+  — collect imitation tuples.
+- `python tools/collect_dataset.py batch [--batches NAMES ...] [--override-settings JSON]` — multi‑shard collectors.
+- `python tools/collect_dataset.py merge [--sources PATTERN ...] [--output PATH]` — merge JSONL shards.
+- `python tools/collect_dataset.py purge [--input PATH] [--output PATH] [--include-draws]` — keep win (and optional draw) records.
+- `python tools/collect_dataset.py fetch [--out-dir DIR] [--ids-file PATH] [--urls-file PATH] [--ids ...] [--user USER] [--format FMT] [--limit N] [--rate R] [--user-agent UA] [--overwrite]`
+  — download Showdown replays.
+- `python tools/collect_dataset.py parse [--raw-dir DIR] [--out-path PATH] [--focus-side {p1,p2}]` — parse tactical hints.
 
 ## Configuration
-- Defaults for offline, online, and data tooling live in `config/defaults.yaml`.
-- The `online` block mirrors the offline BC architecture via `policy_hidden_dim` / `policy_hidden_layers` so weight warmstarts succeed by default.
-- `imitation_batches`, `evaluation`, and `ppo_runs` blocks drive the orchestration helpers in `tools/`.
-- Both offline and PPO runs now emit a best-performing checkpoint alongside the latest weights; adjust `best_policy_path` / `best_stats_path` if you need custom locations.
-- Update the YAML to adjust paths, hyperparameters, or dataset sources.
-- Offline trainer saves checkpoints under `outputs/models/` and TensorBoard events under `outputs/tensorboard/`.
+- Defaults live in `config/defaults.yaml`.
+- Offline and online training share architecture defaults via `policy_hidden_dim` / `policy_hidden_layers` so warmstarts map cleanly.
+- PPO checkpoints save `*_vecnorm.pkl` alongside policies when `use_vecnormalize` is enabled.
+- Update YAML to adjust paths, hyperparameters, reward shaping, and opponent schedules.
+- See `docs/CONFIG.md` for a concise guide to the keys and contracts.
 
-## Offline Pipeline
-- Collect imitation dataset: edit `config/defaults.yaml` and run `python tools/imitation_collect.py` for custom formats/teams.
-- Pretrain behavior cloning policy: run `python tools/offline.py` to fit `BehaviorCloningPolicy`; per-epoch losses are printed and logged to TensorBoard when available.
-- Monitor training: launch `tensorboard --logdir outputs/tensorboard` to inspect loss curves.
-- Consume the policy: load `outputs/models/bc_policy.pt` into offline evaluation or PPO fine-tuning.
+## Invariants (locked by tests)
+- Observation encoding order, dtype, and length (`encode_observation`).
+- Slot action mask construction and slot‑0/slot‑1 concatenation order.
+- Sanitization → repair behavior and `sanitized_action` / `repaired_action` info flags.
+- VecNormalize save/load parity using `<policy_stem>_vecnorm.pkl` during evaluation.
+- Warmstart weight mapping: shared MLP layers + action heads only (BC attention is not transferred).
+- Opponent schedule phases consume timesteps in order; final phase gets the remainder.
 
-## Style & Conventions
-- Formatting via Ruff: line length 100, double quotes, LF, 4‑space indent.
-- Imports auto‑sorted (Ruff/isort). Library code in `src/`.
-- Names: modules/files `snake_case.py`; functions/vars `snake_case`; classes
-  `CamelCase`; constants `UPPER_SNAKE`.
-- Add type hints for new public functions; run `mypy src` locally before PRs.
+## Tests
+- CPU/MPS‑only by design; no full training runs required.
+- Run: `pytest`
+- Some multi‑worker dataset tests may skip on sandboxed environments that disallow
+  `torch_shm_manager`.
 
 ## Security & Server Etiquette
-- Never commit secrets or account tokens. Prefer environment variables or
-  plain Python config files under `data/sources/` when needed.
-- Be polite with Showdown servers: rate-limit requests and prefer a local
-  server for heavy training.
-
-## Data & Storage Guidance
-- Processed datasets live under `data/processed/` (e.g., `imitation.jsonl`, `human_hints.jsonl`).
-- Raw replays stay in `data/raw/` (`downloaded/`, `showdown_logs/`).
-- Model artifacts and run outputs go to `outputs/` (subfolders for `models/`, `tensorboard/`, `plots/`).
-- Keep JSONL append-only until they approach ~1 GB, then consider caching in SQLite if needed.
+- Never commit secrets or account tokens. Prefer environment variables or local config overrides.
+- Be polite with Showdown servers: rate‑limit requests and prefer a local server for heavy training.

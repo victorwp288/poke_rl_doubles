@@ -1,3 +1,4 @@
+# PPO variant with KL regularization against a frozen reference policy.
 import copy
 
 import numpy as np
@@ -97,6 +98,13 @@ class KLRegularizedMaskablePPO(MaskablePPO):
         ref_log_prob = ref_log_prob.view_as(log_prob)
         return (log_prob - ref_log_prob).mean()
 
+    def _maybe_kl_term(self, rollout_data, log_prob, kl_coef):
+        if kl_coef <= 0:
+            return torch.zeros(1, device=self.device), None
+        # KL penalty compares to frozen reference; coef is the pull-back strength.
+        kl_term = self._kl_penalty(rollout_data, log_prob)
+        return kl_term, kl_term.item()
+
     def _prepared_actions(self, rollout_data):
         actions = rollout_data.actions
         if isinstance(self.action_space, spaces.Discrete):
@@ -192,10 +200,9 @@ class KLRegularizedMaskablePPO(MaskablePPO):
                 stats["entropy"].append(entropy_loss.item())
 
                 kl_coef = self._current_kl_coef()
-                kl_term = torch.zeros(1, device=self.device)
-                if kl_coef > 0:
-                    kl_term = self._kl_penalty(rollout_data, log_prob)
-                    stats["kl"].append(kl_term.item())
+                kl_term, kl_value = self._maybe_kl_term(rollout_data, log_prob, kl_coef)
+                if kl_value is not None:
+                    stats["kl"].append(kl_value)
 
                 loss = (
                     policy_loss

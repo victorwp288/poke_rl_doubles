@@ -1,7 +1,7 @@
 import threading
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 _ROOT = Path(__file__).resolve().parents[1]
 _CONFIG_PATH = _ROOT / "config" / "defaults.yaml"

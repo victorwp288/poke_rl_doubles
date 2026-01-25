@@ -1,5 +1,6 @@
 offline:
   dataset_path: data/processed/imitation.jsonl
+  # BC checkpoints + normalization stats live here.
   policy_path: outputs/models/bc_policy.pt
   stats_path: outputs/models/bc_stats.json
   tensorboard_dir: outputs/tensorboard
@@ -69,6 +70,7 @@ imitation_collect:
   battle_format: gen9doublesou
   our_team_path: teams/gen9dou_fixed.txt
   opponent_teams_dir: teams
+  # Teacher policy for data collection (heuristic or policy).
   teacher_kind: policy
   teacher_path: outputs/models/maskable_ppo_warmstart.zip
   opponents:
@@ -81,6 +83,7 @@ imitation_collect:
   opponent_concurrency: 1
 online:
   battle_format: gen9doublesou
+  # Keep PPO MLP dims aligned with offline.hidden_dim/layers for warmstarts.
   policy_hidden_dim: 1536
   policy_hidden_layers: 6
   policy_head_mlp_dim: 512
@@ -91,6 +94,7 @@ online:
   opponent_kinds:
   - simple
   - maxbp
+  # When true, training saves <policy>_vecnorm.pkl and eval must reload it.
   use_vecnormalize: true
   rate_limit_per_second: null
   base_rewards:
@@ -104,6 +108,7 @@ online:
     draw: -0.1
   modes:
     scratch:
+      # Scratch PPO has no BC warmstart and uses base rewards unless overridden.
       total_timesteps: 600000
       learning_rate: 0.0002
       n_steps: 2048
@@ -134,6 +139,7 @@ online:
       console_log_interval_sec: 5.0
       rewards: {}
     warmstart:
+      # Warmstart reuses BC weights and can override rewards.
       total_timesteps: 600000
       learning_rate: 0.0002
       n_steps: 2048
@@ -168,6 +174,7 @@ online:
         loss: -2.0
         draw: -0.5
   opponent_schedule:
+  # Schedule phases consume timesteps in order; final phase gets remainder.
   - timesteps: 100000
     kinds:
     - simple

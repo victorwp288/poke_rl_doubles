@@ -1,0 +1,8 @@
+{
+  "mean": [1.0, 1.0, 1.0],
+  "std": [0.8164966, 0.8164966, 0.8164966],
+  "binary_flags": [false, false, false],
+  "count": 3,
+  "obs_dim": 3,
+  "action_dim": 3
+}

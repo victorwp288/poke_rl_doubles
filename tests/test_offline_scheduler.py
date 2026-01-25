@@ -30,7 +30,12 @@ def _build_scheduler(base_lr, steps_per_epoch, grad_accum_steps, epochs, warmup_
         progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
         return 0.5 * (1.0 + math.cos(math.pi * progress))
 
-    return optimizer, torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda), optimizer_steps, warmup_steps
+    return (
+        optimizer,
+        torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda),
+        optimizer_steps,
+        warmup_steps,
+    )
 
 
 def test_scheduler_counts_use_optimizer_steps_with_accumulation():

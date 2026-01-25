@@ -1,3 +1,4 @@
+# Behavior cloning policy (shared trunk + per-slot heads).
 import torch
 from torch import nn
 

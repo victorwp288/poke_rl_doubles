@@ -4,12 +4,12 @@ This backlog collects lightweight tasks (roughly 1–4 focused hours each) that 
 
 ## Testing & Quality Assurance
 - **Expand mask regression tests**  
-  Goal: Add edge-case coverage for forced double switches and gimmick formats in `tests/test_action_repair.py`.  
-  Files: `src/core/features.py`, `src/online/env.py`, `tests/test_action_repair.py`.  
+  Goal: Add edge-case coverage for forced double switches and gimmick formats in `tests/test_action_repair_env.py`.  
+  Files: `src/core/observation/encoder.py`, `src/core/action_mask.py`, `src/online/env.py`, `tests/test_action_repair_env.py`.  
   Done when the new tests fail before the fix and pass afterward.
 - **Smoke test for imitation collector**  
   Goal: Create a short-lived asyncio test that validates `Recorder.rotate()` and `RecordingHeuristics` logging without hitting poke-env.  
-  Files: `tools/imitation_collect.py`, `tests/`.  
+  Files: `src/offline/collect/*`, `tools/collect_dataset.py`, `tests/`.  
   Done when pytest suite exercises recorder rotation and mask capture.
 - **Config schema validation**  
   Goal: Add a test that loads `config/defaults.yaml` via `src/config.py` and checks required keys exist for `tools/online.py`.  
@@ -37,16 +37,16 @@ This backlog collects lightweight tasks (roughly 1–4 focused hours each) that 
 
 ## Data Pipeline
 - **Replay fetch dry-run mode**  
-  Goal: Add a `--dry-run` flag to `tools/data_fetch.py` that lists targets without downloading.  
-  Files: `tools/data_fetch.py`.  
+  Goal: Add a `--dry-run` flag to `src/data/fetch.py` (reachable via `tools/collect_dataset.py fetch`) that lists targets without downloading.  
+  Files: `src/data/fetch.py`, `tools/collect_dataset.py`.  
   Done when the flag prints planned downloads and exits zero.
 - **Human hints dataset sampler**  
   Goal: Provide a CLI to sample `data/processed/human_hints.jsonl` for manual review.  
-  Files: new `tools/hints_sample.py` or extension to `data_parse.py`.  
+  Files: new `tools/hints_sample.py` or extension to `src/data/parse.py`.  
   Done when `python tools/hints_sample.py --n 10` prints random entries.
 - **Dataset size telemetry**  
-  Goal: Log dataset count and mask sparsity when running `tools/imitation_merge.py`.  
-  Files: `tools/imitation_merge.py`.  
+  Goal: Log dataset count and mask sparsity when running `tools/collect_dataset.py merge`.  
+  Files: `src/offline/collect/merge.py`, `tools/collect_dataset.py`.  
   Done when merge output prints aggregated stats.
 
 ## Model & Training Improvements
@@ -56,7 +56,7 @@ This backlog collects lightweight tasks (roughly 1–4 focused hours each) that 
   Done when modes can set `kl_schedule: cosine` and training logs confirm.
 - **Normalization stats export**  
   Goal: Emit a CSV summary of `NormalizationStats` when loading BC weights.  
-  Files: `src/online/init.py`, `tools/online.py`.  
+  Files: `src/online/policy/warmstart.py`, `tools/online.py`.  
   Done when the CSV appears under `outputs/models/`.
 - **Reward metric plotting hook**  
   Goal: Extend `Gen9DoublesEnv` to expose reward components for TensorBoard logging.  
@@ -87,8 +87,8 @@ This backlog collects lightweight tasks (roughly 1–4 focused hours each) that 
   Files: new `tools/config_diff.py`.  
   Done when the script prints key-level changes for two paths.
 - **Progress bar standardisation**  
-  Goal: Wrap long-running loops in `tools/imitation_batch.py` with `tqdm` and handle optional dependency gracefully.  
-  Files: `tools/imitation_batch.py`, `requirements.txt` (optional extra).  
+  Goal: Wrap long-running loops in `src/offline/collect/batch.py` with `tqdm` and handle optional dependency gracefully.  
+  Files: `src/offline/collect/batch.py`, `tools/collect_dataset.py`, `requirements.txt` (optional extra).  
   Done when batch runs show progress bars without breaking headless runs.
 - **Static typing sweep**  
   Goal: Add missing type hints in `tools/online.py` helper functions and ensure `mypy` stays happy.  
