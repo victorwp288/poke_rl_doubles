@@ -24,6 +24,7 @@ This is a short, file-level tour to orient readers quickly. For deeper context, 
   - `kl_ppo.py` — KL-regularized PPO extension.
 - `src/data/` — replay fetch/parse utilities used by `collect_dataset`.
 - `tools/` — CLI entrypoints that wire config to the modules above.
+- `showdown_visual/` — local Showdown battle visualizer adapter.
 - `config/defaults.yaml` — single source of truth for defaults and modes.
 
 ## Core Contracts to Cite
@@ -38,6 +39,7 @@ This is a short, file-level tour to orient readers quickly. For deeper context, 
 - `tools/offline_train.py` — BC training, sweeps, and BC-vs-bots eval.
 - `tools/online.py` — PPO training, grid, and batch runs.
 - `tools/eval_models.py` — PPO evaluation suites and comparisons.
+- `showdown_visual/run_showdown_battle.py` — run a live local Showdown battle and print a spectate URL.
 
 ## Oral Defense Quick Path
 - Read `docs/ARCHITECTURE.md` + `docs/DATAFLOW.md`.

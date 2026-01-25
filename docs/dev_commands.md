@@ -15,6 +15,8 @@
 - `python tools/online.py batch [modes ...]` — run multiple PPO modes sequentially.
 
 - `python tools/eval_models.py [compare|suite|ppo|bc] ...` — evaluation entrypoint (see `--help`).
+- `python showdown_visual/run_showdown_battle.py --model PATH [--log-level summary|verbose]`
+  — live local Showdown battle visualizer (prints spectate URL).
 
 - `tensorboard --logdir outputs/tensorboard` — inspect offline/online training metrics.
 - `ruff format .` / `ruff check --fix .` / `mypy src tools` — formatting, linting, typing.
@@ -35,6 +37,7 @@
   - `kl_ppo.py` — KL-regularized PPO.
 - `src/data/` — replay fetch + parse utilities used by `collect_dataset`.
 - `tools/` — thin CLI entrypoints wiring config to the modules above.
+- `showdown_visual/` — local Showdown battle visualizer adapter.
 - `data/` — datasets and replay artifacts.
 - `outputs/` — checkpoints, logs, tensorboard, eval summaries.
 - `teams/` — curated Showdown team exports.

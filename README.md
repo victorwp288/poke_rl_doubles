@@ -42,6 +42,12 @@ python tools/online.py warmstart
 
 # evaluate saved PPO checkpoints
 python tools/eval_models.py --policy scratch=outputs/models/maskable_ppo_scratch_best.zip --episodes 200
+
+# visualize a live battle on a local Showdown server
+python showdown_visual/run_showdown_battle.py \
+  --model outputs/models/maskable_ppo_warmstart.zip \
+  --server-url http://localhost:8000 \
+  --log-level summary
 ```
 
 ## Project Structure
@@ -55,6 +61,7 @@ python tools/eval_models.py --policy scratch=outputs/models/maskable_ppo_scratch
     `train/` (model/callbacks/grid/batch), `eval/` (evaluation suite), `kl_ppo.py`
 - `src/data/` — replay fetch + parse utilities used by collectors
 - `tools/` — CLI entrypoints for data, training, evaluation
+- `showdown_visual/` — local Showdown battle visualizer adapter
 - `tests/` — CPU/MPS‑only unit + smoke tests; golden fixtures under `tests/fixtures/`
 
 ## Entrypoints (CLI)
@@ -82,6 +89,9 @@ legacy behavior.
   — PPO vs simple heuristics.
 - `python tools/eval_models.py bc [--episodes N] [--opponent KIND] [--opponent-pool CSV] [--checkpoint PATH] [--stats-path PATH] ...`
   — BC vs bots.
+
+- `python showdown_visual/run_showdown_battle.py --model PATH [--log-level summary|verbose]`
+  — run a live local Showdown battle and print a spectate URL.
 
 - `python tools/collect_dataset.py [collect] [--n-battles N] [--server-url URL] [--battle-format FMT] [--our-team-path PATH] [--opponents ...] ...`
   — collect imitation tuples.

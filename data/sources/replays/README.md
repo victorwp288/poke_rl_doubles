@@ -14,8 +14,8 @@ Both files are optional; the fetch script treats missing/empty files as empty.
    - The full replay URL, e.g. `https://replay.pokemonshowdown.com/gen9doublesou-2032363987`.
 
 ### How to use in this repo
-- Paste IDs into `configs/replays/ids.txt` (one per line).
-- Or paste URLs into `configs/replays/urls.txt` (one per line).
+- Paste IDs into `data/sources/replays/ids.txt` (one per line).
+- Or paste URLs into `data/sources/replays/urls.txt` (one per line).
 - Use only Gen 9 Doubles OU replays: IDs should start with `gen9doublesou-`.
 
 ### Examples
