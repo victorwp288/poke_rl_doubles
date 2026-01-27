@@ -1,3 +1,15 @@
+"""
+Offline behavior cloning (BC) training loop.
+
+Summary:
+- Scans a JSONL dataset to compute mean/std normalization and byte offsets (streaming).
+- Builds an indexed dataset that can train on files larger than RAM.
+- Trains `BehaviorCloningPolicy` with masked cross-entropy loss (illegal actions are masked out).
+- Exports:
+  - `outputs/models/bc_policy*.pt` (checkpoint payload with state_dict + metadata)
+  - `outputs/models/bc_stats*.json` (normalization stats used for parity/warmstart)
+"""
+
 import math
 import random
 

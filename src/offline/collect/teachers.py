@@ -23,6 +23,10 @@ class RecordingHeuristics(SimpleHeuristicsPlayer):
         mask0 = slot_action_mask(battle, 0, self._act_size)
         mask1 = slot_action_mask(battle, 1, self._act_size)
         first, second = _action_to_tuple(order, battle)
+        # Step-record schema contract (used by offline dataset loader):
+        # - observation: list[float] (len 393)
+        # - action: [slot0_action, slot1_action]
+        # - mask: [slot0_mask, slot1_mask] (each len act_size)
         record = {
             "battle_tag": battle.battle_tag,
             "turn": battle.turn,

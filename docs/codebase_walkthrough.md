@@ -1,7 +1,8 @@
 # Codebase Walkthrough (Quick Tour)
 
 This is a short, file-level tour to orient readers quickly. For deeper context, see
-`docs/ARCHITECTURE.md` and `docs/DATAFLOW.md`.
+[`codebase_overview.md`](./codebase_overview.md), [`ARCHITECTURE.md`](./ARCHITECTURE.md), and
+[`DATAFLOW.md`](./DATAFLOW.md).
 
 ## Architecture Snapshot
 - **Offline**: collect dataset → train BC → export checkpoint + stats.
@@ -42,6 +43,11 @@ This is a short, file-level tour to orient readers quickly. For deeper context, 
 - `showdown_visual/run_showdown_battle.py` — run a live local Showdown battle and print a spectate URL.
 
 ## Oral Defense Quick Path
-- Read `docs/ARCHITECTURE.md` + `docs/DATAFLOW.md`.
+- Read [`ARCHITECTURE.md`](./ARCHITECTURE.md) + [`DATAFLOW.md`](./DATAFLOW.md).
 - Skim `src/core/observation/encoder.py` and `src/core/action_mask.py` for contracts.
 - Skim `src/online/env_mask_repair.py` + `src/online/kl_ppo.py` for safety + regularization.
+
+## Next steps
+
+- For the **full narrative + glossary + diagrams**: [`codebase_overview.md`](./codebase_overview.md)
+- For the **command cheat sheet**: [`dev_commands.md`](./dev_commands.md)

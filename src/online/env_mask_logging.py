@@ -104,6 +104,7 @@ class MaskableEnvLoggingMixin:
         if isinstance(battle, DoubleBattle):
             info["battle_stats"] = self.base_env.latest_stats(battle)
         # Flags separate input sanitization from post-sanitize repair substitutions.
+        # Parity/semantics are checked in `tests/test_env_smoke.py`.
         if changed:
             info["sanitized_action"] = True  # input action was modified
         if repaired:

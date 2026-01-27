@@ -8,13 +8,19 @@ PPO‑based agent built on Stable‑Baselines3 (PyTorch) that plays **Generation
 **poke‑env**. The pipeline is two‑stage: offline imitation learning (behavioral cloning) followed by
 online RL fine‑tuning (maskable PPO). Evaluation uses heuristic baselines plus policy cross‑play.
 
-Related demo: https://github.com/victorwp288/poke-rl-demo
+![System Architecture](docs/assets/system_architecture.png)
+
+Related demo: [`victorwp288/poke-rl-demo`](https://github.com/victorwp288/poke-rl-demo)
 
 ## How to Read This Repo
-- Start with `docs/ARCHITECTURE.md` for the component map and core contracts.
-- Then read `docs/DATAFLOW.md` for the offline/online/eval pipelines end‑to‑end.
-- Use `docs/CONFIG.md` when you need to understand `config/defaults.yaml`.
-- `docs/codebase_walkthrough.md` is a short, file‑level tour for quick orientation.
+- Docs hub: [`docs/README.md`](docs/README.md)
+- Start with [`docs/codebase_overview.md`](docs/codebase_overview.md) for a fact-checked “map” of what’s where.
+- For a guided tour of the **implementation**, read [`docs/CODE_TOUR.md`](docs/CODE_TOUR.md).
+- Then read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the component map and core contracts.
+- Then read [`docs/DATAFLOW.md`](docs/DATAFLOW.md) for the offline/online/eval pipelines end‑to‑end.
+- Use [`docs/CONFIG.md`](docs/CONFIG.md) when you need to understand `config/defaults.yaml`.
+- Use [`docs/dev_commands.md`](docs/dev_commands.md) when you just want the command cheat sheet.
+- [`docs/codebase_walkthrough.md`](docs/codebase_walkthrough.md) is a short, file‑level tour for quick orientation.
 
 ## Quick Start
 Prereqs: Python 3.11

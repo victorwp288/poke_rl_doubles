@@ -3,6 +3,10 @@
 This document is the high-level map of the system. It describes the major components and the
 contracts that must stay stable for training and evaluation parity.
 
+See also: [`codebase_overview.md`](./codebase_overview.md), [`DATAFLOW.md`](./DATAFLOW.md),
+[`EVALUATION.md`](./EVALUATION.md), [`DATA_SOURCES.md`](./DATA_SOURCES.md), [`CONFIG.md`](./CONFIG.md),
+[`dev_commands.md`](./dev_commands.md), [`README.md`](../README.md).
+
 ## System Overview
 - **Offline stage (behavior cloning)**: Collect masked state/action pairs, train a BC policy, and
   export normalization stats and checkpoints.
@@ -34,3 +38,9 @@ contracts that must stay stable for training and evaluation parity.
 - `tools/offline_train.py` — BC training, sweeps, and BC-vs-bots evaluation.
 - `tools/online.py` — PPO training (scratch/warmstart), grid/batch runs.
 - `tools/eval_models.py` — PPO evaluation suite and comparisons.
+
+## Next steps
+
+- To see the **pipelines end-to-end**: [`DATAFLOW.md`](./DATAFLOW.md)
+- To see the **defaults/knobs**: [`CONFIG.md`](./CONFIG.md)
+- To see the **big-picture story + artifacts/tests**: [`codebase_overview.md`](./codebase_overview.md)

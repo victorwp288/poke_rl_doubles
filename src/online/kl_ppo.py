@@ -1,4 +1,13 @@
-# PPO variant with KL regularization against a frozen reference policy.
+"""
+Maskable PPO variant with optional KL regularization.
+
+Summary:
+- This extends sb3-contrib `MaskablePPO` and (optionally) adds a KL penalty that keeps the learned
+  policy close to a frozen reference (e.g. a BC-initialized policy) during early training.
+- If no reference policy or coefficients are set, it behaves like standard MaskablePPO.
+
+See docs/codebase_overview.md and docs/EVALUATION.md for how this shows up in logs/metrics.
+"""
 import copy
 
 import numpy as np

@@ -1,4 +1,13 @@
-# Behavior cloning policy (shared trunk + per-slot heads).
+"""
+Behavior cloning (BC) policy network.
+
+Summary:
+- Input: fixed 393-dim observation vector (same encoder used by PPO).
+- Output: 2 independent action logits heads (slot0 and slot1), so the model can choose coordinated
+  actions for doubles.
+- Includes learned “slot queries” via attention as a lightweight way to condition each slot decision
+  on the shared context.
+"""
 import torch
 from torch import nn
 

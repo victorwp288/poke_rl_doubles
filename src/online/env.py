@@ -1,4 +1,15 @@
-# Core online environment wrapper (obs encoding, rewards, masking).
+"""
+Core online environment wrapper (poke-env ↔ Gymnasium ↔ SB3).
+
+Summary:
+- `Gen9DoublesEnv` defines the fixed observation space (393-dim vector) and computes per-step rewards.
+- `MaskableDoublesEnv` wraps the base env to add action masks + sanitize→repair→fallback so PPO never
+  has to learn from illegal actions.
+
+High-signal contracts:
+- `action_masks()` returns a boolean mask shaped `(2 * act_size,)` interpreted as `[slot0 | slot1]`.
+- Observation ordering is fixed across offline/online; changing it breaks dataset/checkpoint parity.
+"""
 import threading
 import time
 from pathlib import Path
@@ -142,6 +153,7 @@ class MaskableDoublesEnv(
         if isinstance(self.action_space, spaces.MultiDiscrete) and len(self.action_space.nvec) >= 1:
             self._act_size = int(self.action_space.nvec[0])
         # Action mask is flattened as [slot0 | slot1] with length 2 * act_size.
+        # This mask layout is a train/eval contract (see docs/ARCHITECTURE.md and golden mask tests).
         self._mask_shape = (2 * self._act_size,)
         self._step_timeout = 5.0
         self._timeout_lock = threading.Lock()

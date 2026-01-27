@@ -17,6 +17,8 @@ class MaskableEnvCoreMixin:
         return _joint_action_mask(battle, self._act_size)
 
     def action_masks(self):
+        # sb3-contrib interface: return a boolean mask of shape (2 * act_size,) interpreted as
+        # [slot0_mask | slot1_mask]. This is a core contract for maskable PPO.
         return self.get_action_mask().astype(bool, copy=False)
 
     def _sanitize_action(self, action):

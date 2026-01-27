@@ -1,5 +1,8 @@
 # Essential Commands & File Map
 
+See also: [`codebase_overview.md`](./codebase_overview.md), [`ARCHITECTURE.md`](./ARCHITECTURE.md),
+[`DATAFLOW.md`](./DATAFLOW.md), [`CONFIG.md`](./CONFIG.md), [`README.md`](../README.md).
+
 ## Terminal Cheat Sheet
 - `./init.sh` — install project deps with the pinned versions.
 - `pip install -r requirements.txt` — manual install alternative.
@@ -42,3 +45,10 @@
 - `outputs/` — checkpoints, logs, tensorboard, eval summaries.
 - `teams/` — curated Showdown team exports.
 - `docs/` — architecture, dataflow, config guide, and walkthrough.
+
+## Next steps
+
+- For the **big-picture story + diagrams**: [`codebase_overview.md`](./codebase_overview.md)
+- For the **contracts**: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+- For the **pipelines**: [`DATAFLOW.md`](./DATAFLOW.md)
+- For the **defaults/knobs**: [`CONFIG.md`](./CONFIG.md)

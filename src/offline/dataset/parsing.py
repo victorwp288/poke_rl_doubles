@@ -1,3 +1,16 @@
+"""
+Dataset parsing contract for imitation JSONL.
+
+High-signal invariants:
+- Training rows must contain `observation` (float list), `action` (len 2 int list), and `mask`
+  (2 × act_size int list).
+- Actions must be legal under the corresponding slot mask.
+- The collector may write battle-level summary records into the same JSONL; scanning/training code
+  skips records that do not satisfy this step-record schema.
+
+See docs/codebase_overview.md and docs/DATA_SOURCES.md for examples.
+"""
+
 def _as_float_list(raw):
     if not isinstance(raw, list):
         raise ValueError

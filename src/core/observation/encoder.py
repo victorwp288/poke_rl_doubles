@@ -32,6 +32,7 @@ class ObservationEncoder(
         features = []
         # Feature order is a training/eval contract; reordering breaks saved datasets/checkpoints.
         # Append only, and regenerate fixtures if this order changes.
+        # Parity is enforced by `tests/test_feature_golden_observation.py` (golden_observation.npy).
         features.extend(self._base_slots(battle))
         features.extend(self._global_state(battle))
         player_slots = list(battle.active_pokemon)

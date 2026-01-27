@@ -1,3 +1,15 @@
+"""
+Action mask construction for doubles.
+
+Summary:
+- Computes which discrete action IDs are legal *per slot* given the current battle state.
+- In doubles, legality depends on joint choices; we join per-slot legal orders and map them back to
+  per-slot action indices.
+- The training/eval contract is that joint masks are concatenated as `[slot0 | slot1]`.
+
+Related parity tests: `tests/test_feature_golden_mask.py`.
+"""
+
 from collections.abc import Sequence
 
 import numpy as np
@@ -179,6 +191,7 @@ def _build_slot_action_mask(battle, slot, act_size) -> MaskVector:
 def combine_slot_masks(mask_a: MaskLike, mask_b: MaskLike) -> np.ndarray:
     # Contract: concatenate (slot0, slot1) to shape (2 * act_size,).
     # Changing this order breaks mask semantics in training/eval.
+    # Parity is enforced by `tests/test_feature_golden_mask.py` (golden_slot_mask.npy).
     arr_a = np.asarray(list(mask_a), dtype=np.uint8)
     arr_b = np.asarray(list(mask_b), dtype=np.uint8)
     return np.concatenate((arr_a, arr_b), axis=0)
